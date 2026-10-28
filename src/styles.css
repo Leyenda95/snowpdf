@@ -1,0 +1,157 @@
+@import "tailwindcss";
+@import "pdfjs-dist/web/pdf_viewer.css";
+
+/* Dark mode follows the `.dark` class on <html> (set from the theme setting). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
+
+  /* Brand: icy blue */
+  --color-brand-50: #f0f7ff;
+  --color-brand-100: #e0efff;
+  --color-brand-200: #b9dcff;
+  --color-brand-300: #7cc0ff;
+  --color-brand-400: #369dff;
+  --color-brand-500: #0b7cf5;
+  --color-brand-600: #005fd1;
+  --color-brand-700: #004ba9;
+  --color-brand-800: #04408b;
+  --color-brand-900: #0a3873;
+  --color-brand-950: #07234a;
+
+  --shadow-pop: 0 10px 30px -10px rgb(15 23 42 / 0.25), 0 4px 10px -4px rgb(15 23 42 / 0.12);
+}
+
+/* Semantic tokens: use these (bg-app, bg-surface, text-fg, border-line...) instead of raw greys
+   so light/dark themes stay consistent. */
+@theme inline {
+  --color-app: var(--app-bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-canvas: var(--canvas-bg);
+}
+
+:root {
+  --app-bg: #f3f5f9;
+  --surface: #ffffff;
+  --surface-2: #f6f8fb;
+  --surface-3: #eceff5;
+  --fg: #0f172a;
+  --fg-muted: #475569;
+  --fg-subtle: #94a3b8;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  --canvas-bg: #e6e9ef;
+  color-scheme: light;
+}
+
+.dark {
+  --app-bg: #0b1120;
+  --surface: #121a2b;
+  --surface-2: #172135;
+  --surface-3: #1e2a41;
+  --fg: #e2e8f0;
+  --fg-muted: #a3b1c6;
+  --fg-subtle: #64748b;
+  --line: #243049;
+  --line-strong: #33415e;
+  --canvas-bg: #0e1626;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Thin, unobtrusive scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+/* ---------- PDF page layers (pdf.js text/annotation layers live inside .snow-page) ---------- */
+.snow-page {
+  --user-unit: 1;
+  --total-scale-factor: calc(var(--scale-factor) * var(--user-unit));
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  position: relative;
+  background: white;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.18), 0 6px 18px -8px rgb(15 23 42 / 0.25);
+  flex: none;
+}
+
+/* Sized in JS (PageView placeBitmap) so bitmap pixels match device pixels. */
+.snow-page canvas.snow-page-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+/* The text layer only matters for selection / text tools */
+.snow-page .textLayer {
+  z-index: 1;
+}
+.snow-page .annotationLayer {
+  z-index: 2;
+}
+.snow-page .snow-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.snow-page .snow-overlay > * {
+  pointer-events: auto;
+}
+
+/* Tools decide which pdf.js layer may receive the pointer. */
+.snow-page.text-inert .textLayer,
+.snow-page.text-inert .textLayer * {
+  pointer-events: none !important;
+}
+.snow-page.forms-inert .annotationLayer,
+.snow-page.forms-inert .annotationLayer * {
+  pointer-events: none !important;
+}
+
+/* Editor text boxes must use the same metrics as the exported PDF. */
+.snow-text {
+  font-kerning: none;
+  font-variant-ligatures: none;
+  white-space: pre;
+  font-synthesis: weight style;
+}
+/* Only the text editor (textarea) may select text: boxes just get their selection frame. */
+.snow-text:not(textarea) {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.snow-overlay [data-object-id] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.snow-overlay [data-object-id] textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
