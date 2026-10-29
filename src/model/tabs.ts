@@ -25,7 +25,7 @@ type DocSnapshot = Pick<
 
 type EditorSnapshot = Pick<
   ReturnType<typeof useEditorStore.getState>,
-  "tool" | "placing" | "selection" | "zoom" | "fit" | "currentPage" | "sidebar" | "thumbnails" | "showProps"
+  "tool" | "placing" | "selection" | "zoom" | "fit" | "currentPage" | "scroll" | "sidebar" | "thumbnails" | "showProps"
 >;
 
 export interface Tab {
@@ -57,7 +57,7 @@ function stashActive(): void {
     id: activeId,
     view: app === "editor" || app === "organize" ? app : (tabs.find((t) => t.id === activeId)?.view ?? "editor"),
     doc: { open: d.open, title: d.title, filePath: d.filePath, sources: d.sources, doc: d.doc, past: d.past, future: d.future, dirty: d.dirty, formRevision: d.formRevision },
-    editor: { tool: e.tool, placing: e.placing, selection: e.selection, zoom: e.zoom, fit: e.fit, currentPage: e.currentPage, sidebar: e.sidebar, thumbnails: e.thumbnails, showProps: e.showProps },
+    editor: { tool: e.tool, placing: e.placing, selection: e.selection, zoom: e.zoom, fit: e.fit, currentPage: e.currentPage, scroll: e.scroll, sidebar: e.sidebar, thumbnails: e.thumbnails, showProps: e.showProps },
     textStyle: e.styles.text,
     flattenForms: useExportPrefs.getState().flattenForms,
   };
@@ -73,7 +73,7 @@ function restore(tab: Tab): void {
       editingId: null,
       flash: null,
       signatureDialog: false,
-      scrollRequest: s.scrollRequest + 1,
+      scrollRequest: null,
     }));
   }
   useExportPrefs.getState().set({ flattenForms: tab.flattenForms ?? false });

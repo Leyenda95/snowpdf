@@ -76,8 +76,10 @@ interface EditorState {
   thumbnails: boolean;
   showProps: boolean;
   styles: ToolStyles;
-  /** Bumped to ask the viewer to scroll to `currentPage`. */
-  scrollRequest: number;
+  /** Page the viewer should scroll to; the viewer clears it once applied. */
+  scrollRequest: number | null;
+  /** Last scroll offset of the viewer (CSS px), written by the viewer; tabs restore it. */
+  scroll: { top: number; left: number };
   /** Search result shown briefly on a page. */
   flash: { pageId: string; frames: Frame[]; at: number } | null;
   /** Signature dialog visibility (opened by the toolbar or the "Firmar" tool). */
@@ -94,6 +96,7 @@ interface EditorState {
   setEditing(id: string | null): void;
   setZoom(zoom: number, fit?: EditorState["fit"]): void;
   setCurrentPage(index: number): void;
+  setScroll(scroll: { top: number; left: number }): void;
   goToPage(index: number): void;
   setSidebar(panel: SidebarPanel): void;
   setThumbnails(open: boolean): void;
@@ -180,14 +183,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   thumbnails: true,
   showProps: true,
   styles: loadStyles(),
-  scrollRequest: 0,
+  scrollRequest: null,
+  scroll: { top: 0, left: 0 },
   flash: null,
   signatureDialog: false,
   toolsPanel: loadToolsPanel(),
   toolRequest: null,
 
   reset: (tool = "select") =>
-    set({ tool, placing: null, selection: [], editingId: null, sidebar: null, ...openingView(), currentPage: 0, scrollRequest: 0, flash: null, signatureDialog: tool === "signature" }),
+    set({ tool, placing: null, selection: [], editingId: null, sidebar: null, ...openingView(), currentPage: 0, scrollRequest: null, scroll: { top: 0, left: 0 }, flash: null, signatureDialog: tool === "signature" }),
   // Leaving "edit text" clears the selection: edited texts are page content in the other tools.
   setTool: (tool) =>
     set({ tool, placing: tool === get().tool ? get().placing : null, editingId: null, selection: tool === "select" && get().tool !== "editText" ? get().selection : [] }),
@@ -196,7 +200,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setEditing: (editingId) => set({ editingId, selection: editingId ? [editingId] : get().selection }),
   setZoom: (zoom, fit = null) => set({ zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom)), fit }),
   setCurrentPage: (currentPage) => set({ currentPage }),
-  goToPage: (index) => set((s) => ({ currentPage: index, scrollRequest: s.scrollRequest + 1 })),
+  setScroll: (scroll) => set({ scroll }),
+  goToPage: (index) => set({ currentPage: index, scrollRequest: index }),
   setSidebar: (sidebar) => set({ sidebar }),
   setThumbnails: (thumbnails) => set({ thumbnails }),
   toggleProps: () => set((s) => ({ showProps: !s.showProps })),

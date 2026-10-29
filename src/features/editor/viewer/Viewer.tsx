@@ -128,6 +128,8 @@ export function Viewer({ overlay, underlay, textInteractive, formsInteractive, o
     frame.current = requestAnimationFrame(() => {
       const root = scrollRef.current;
       if (!root) return;
+      const { scroll, setScroll } = useEditorStore.getState();
+      if (root.scrollTop !== scroll.top || root.scrollLeft !== scroll.left) setScroll({ top: root.scrollTop, left: root.scrollLeft });
       const line = root.getBoundingClientRect().top + root.clientHeight / 3;
       const slots = root.querySelectorAll<HTMLElement>("[data-slot-index]");
       for (const el of slots) {
@@ -141,13 +143,21 @@ export function Viewer({ overlay, underlay, textInteractive, formsInteractive, o
     });
   }, []);
 
-  // "Go to page" requests.
-  useEffect(() => {
-    if (!scrollRequest) return;
+  // On mount (tab switch, back from another view) return to the last offset, unless a page was requested.
+  useLayoutEffect(() => {
     const root = scrollRef.current;
-    const { currentPage } = useEditorStore.getState();
-    const el = root?.querySelector<HTMLElement>(`[data-slot-index="${currentPage}"]`);
-    if (root && el) root.scrollTo({ top: el.offsetTop - PAD + 8, behavior: "auto" });
+    const { scroll, scrollRequest: pending } = useEditorStore.getState();
+    if (!root || pending !== null) return;
+    root.scrollTop = scroll.top;
+    root.scrollLeft = scroll.left;
+  }, []);
+
+  // "Go to page" requests.
+  useLayoutEffect(() => {
+    if (scrollRequest === null) return;
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-slot-index="${scrollRequest}"]`);
+    if (el) scrollRef.current!.scrollTo({ top: el.offsetTop - PAD + 8, behavior: "auto" });
+    useEditorStore.setState({ scrollRequest: null });
   }, [scrollRequest]);
 
   const goToSourcePage = useCallback((sourceId: string, sourceIndex: number) => {
