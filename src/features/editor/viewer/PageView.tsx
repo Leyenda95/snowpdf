@@ -13,6 +13,7 @@ import { displayRotation, type PageRef } from "@/model/types";
 import { PDF_TO_CSS } from "@/render/pdfjs";
 import { enqueueRender } from "@/render/renderQueue";
 import { SnowLinkService } from "@/render/linkService";
+import { attachTextSelection } from "@/render/textSelection";
 import { pageGeometry, type PageGeometry } from "./geometry";
 import { t } from "@/i18n";
 
@@ -199,6 +200,7 @@ export const PageView = memo(function PageView(props: PageViewProps) {
     if (!div || !active || !page.sourceId) return;
     let cancelled = false;
     let layer: TextLayer | null = null;
+    let detach: (() => void) | null = null;
     (async () => {
       const pdfPage = await getSource(page.sourceId!).pdf.getPage(page.sourceIndex + 1);
       if (cancelled) return;
@@ -210,11 +212,13 @@ export const PageView = memo(function PageView(props: PageViewProps) {
       });
       await layer.render();
       if (cancelled) return;
+      detach = attachTextSelection(div);
       textLayer.current = { layer, pdfPage };
     })().catch(() => undefined);
     return () => {
       cancelled = true;
       layer?.cancel();
+      detach?.();
       textLayer.current = null;
       div.replaceChildren();
     };
