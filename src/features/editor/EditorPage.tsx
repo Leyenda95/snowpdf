@@ -10,7 +10,7 @@ import { platform } from "@/platform";
 import { openDocuments } from "@/model/workspace";
 import { AppHeader } from "@/features/shell/AppHeader";
 import { SignatureDialog } from "@/features/signature/SignatureDialog";
-import { Button, IconButton, Menu, NumberField, confirmDialog, useWindowFileDrop } from "@/ui";
+import { Button, IconButton, Menu, NumberField, confirmDialog, toast, useWindowFileDrop } from "@/ui";
 import { handleDroppedFiles } from "./askDropAction";
 import { useEditorStore } from "./editorStore";
 import { EditorToolbar, TOOL_SHORTCUTS, activateTool } from "./EditorToolbar";
@@ -126,7 +126,7 @@ export function EditorPage() {
             case "a":
               if (!page) return false;
               ed.setTool("select");
-              ed.select(doc.doc.objects.filter((o) => o.pageId === page.id).map((o) => o.id));
+              ed.select(doc.doc.objects.filter((o) => o.pageId === page.id && !(o.kind === "text" && o.replaces)).map((o) => o.id));
               return true;
             case "+":
             case "=":
@@ -222,7 +222,12 @@ export function EditorPage() {
   const openExternal = useCallback(async (url: string) => {
     if (!/^https?:|^mailto:/i.test(url)) return;
     const ok = await confirmDialog({ title: t("Abrir enlace externo"), message: url, confirmLabel: t("Abrir") });
-    if (ok) window.open(url, "_blank", "noopener,noreferrer");
+    if (!ok) return;
+    try {
+      await platform.openExternalUrl(url);
+    } catch (err) {
+      toast.error(t("No se pudo abrir el enlace"), { description: err instanceof Error ? err.message : String(err) });
+    }
   }, []);
 
   const textInteractive = (tool === "select" || tool === "highlight") && !placing;

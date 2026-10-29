@@ -2,8 +2,7 @@ import { memo, type CSSProperties } from "react";
 import { getAsset } from "@/model/registry";
 import type { EditorObject } from "@/model/types";
 import { SYMBOL_PATHS, arrowHead } from "@/pdf/symbols";
-import { TEXT_PADDING } from "@/pdf/textLayout";
-import { textFontStyle } from "./textStyle";
+import { textBoxStyle, textFontStyle } from "./textStyle";
 import { t } from "@/i18n";
 
 /** Pure visual of an object inside its (already positioned and rotated) box. */
@@ -19,7 +18,7 @@ export const ObjectView = memo(function ObjectView({ obj, scale }: { obj: Editor
           className="snow-text"
           style={{
             ...fill,
-            padding: TEXT_PADDING * scale,
+            ...textBoxStyle(obj, scale),
             ...textFontStyle(obj, scale),
             fontSize: obj.size * scale,
             lineHeight: obj.lineHeight,

@@ -188,7 +188,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   reset: (tool = "select") =>
     set({ tool, placing: null, selection: [], editingId: null, sidebar: null, ...openingView(), currentPage: 0, scrollRequest: 0, flash: null, signatureDialog: tool === "signature" }),
-  setTool: (tool) => set({ tool, placing: tool === get().tool ? get().placing : null, editingId: null, selection: tool === "select" ? get().selection : [] }),
+  // Leaving "edit text" clears the selection: edited texts are page content in the other tools.
+  setTool: (tool) =>
+    set({ tool, placing: tool === get().tool ? get().placing : null, editingId: null, selection: tool === "select" && get().tool !== "editText" ? get().selection : [] }),
   setPlacing: (placing) => set({ placing }),
   select: (selection) => set({ selection, editingId: selection.includes(get().editingId ?? "") ? get().editingId : null }),
   setEditing: (editingId) => set({ editingId, selection: editingId ? [editingId] : get().selection }),

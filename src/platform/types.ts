@@ -43,6 +43,8 @@ export interface Platform {
   takeStartupFiles(): Promise<string[]>;
   /** Installed fonts (desktop): registry name, e.g. "Segoe UI Semibold (TrueType)", and file. */
   listSystemFonts(): Promise<{ name: string; path: string }[]>;
+  /** Opens an http(s)/mailto URL in the system's default application. */
+  openExternalUrl(url: string): Promise<void>;
 }
 
 export const EXTENSIONS: Record<FileKind, string[]> = {

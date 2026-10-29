@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { join } from "@tauri-apps/api/path";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { exists, readFile, writeFile } from "@tauri-apps/plugin-fs";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { EXTENSIONS, SAVE_FILTERS, baseName, type FileKind, type OutputFile, type PickedFile, type Platform } from "./types";
 import { t } from "@/i18n";
 
@@ -73,6 +74,10 @@ export const tauriPlatform: Platform = {
     } catch {
       return [];
     }
+  },
+
+  async openExternalUrl(url) {
+    await openUrl(url);
   },
 
   async listSystemFonts() {

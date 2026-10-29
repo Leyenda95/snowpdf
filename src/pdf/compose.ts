@@ -1,10 +1,11 @@
-import { PDFArray, PDFDict, PDFName, PDFPageTree, PDFRef, degrees, type PDFDocument, type PDFPage } from "@cantoo/pdf-lib";
-import { displayRotation, type EditorObject, type PageRef } from "@/model/types";
+import { PDFArray, PDFDict, PDFName, PDFNumber, PDFPageTree, PDFRef, degrees, type PDFDocument, type PDFPage } from "@cantoo/pdf-lib";
+import { displayRotation, type EditorObject, type PageRef, type PdfBox } from "@/model/types";
 import { copyPagesWithFields } from "./acroform";
 import { Baker, type BakeAsset, type BakeFont } from "./bake";
 import { createPdf, loadPdf, savePdf } from "./docUtils";
 import { frameBBox } from "./objectGeometry";
 import { pruneUnreachable } from "./prune";
+import { linkBoxes, normalizeBox, sameBox } from "./textLinks";
 import type { RedactionArea } from "./mupdf/ops";
 import { t } from "@/i18n";
 
@@ -102,6 +103,35 @@ function hasAuthor(doc: PDFDocument): boolean {
   }
 }
 
+/**
+ * Refit the Link annotations of `page` whose /Rect is the original rectangle of one of `links`
+ * onto that link's new box (hit area included); a link whose text was removed is dropped.
+ */
+function moveLinks(page: PDFPage, links: { rect: PdfBox; box: PdfBox | null }[]): void {
+  const annots = page.node.Annots();
+  if (!annots) return;
+  const drop: number[] = [];
+  for (let i = 0; i < annots.size(); i++) {
+    const annot = annots.lookupMaybe(i, PDFDict);
+    if (!annot || annot.lookupMaybe(PDFName.of("Subtype"), PDFName) !== PDFName.of("Link")) continue;
+    const rect = annot.lookupMaybe(PDFName.of("Rect"), PDFArray);
+    if (!rect || rect.size() < 4) continue;
+    const nums = [0, 1, 2, 3].map((k) => rect.lookupMaybe(k, PDFNumber)?.asNumber() ?? NaN);
+    if (nums.some(Number.isNaN)) continue;
+    const box = normalizeBox(nums);
+    const hit = links.find((l) => sameBox(normalizeBox(l.rect), box));
+    if (!hit) continue;
+    if (!hit.box) {
+      drop.push(i);
+      continue;
+    }
+    annot.set(PDFName.of("Rect"), page.doc.context.obj(hit.box));
+    // Viewers hit-test /QuadPoints before /Rect: the old ones would keep the old area.
+    annot.delete(PDFName.of("QuadPoints"));
+  }
+  for (const i of drop.reverse()) annots.remove(i);
+}
+
 export async function composeDocument(input: ComposeInput): Promise<Uint8Array> {
   const { pages, objects } = input;
   if (pages.length === 0) throw new Error(t("El documento no tiene páginas."));
@@ -187,6 +217,11 @@ export async function composeDocument(input: ComposeInput): Promise<Uint8Array> 
     doc = await loadPdf(redacted);
     targets = doc.getPages();
     removed.clear();
+  }
+
+  // 3b. Links of edited text follow the new text.
+  for (let i = 0; i < pages.length; i++) {
+    for (const o of byPage.get(pages[i].id) ?? []) if (o.kind === "text" && o.links?.length) moveLinks(targets[i], linkBoxes(o));
   }
 
   // 4. Paint the editor objects.

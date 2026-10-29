@@ -9,7 +9,7 @@ Tool keys do nothing while you are typing in a text field.
 | V | Select and fill forms |
 | H | Hand (pan) |
 | T | Add text |
-| E | Edit existing text |
+| E | Edit existing text (click to edit, drag to move, right-click for the object menu; edited text is plain page content in other tools) |
 | I | Add image |
 | S | Sign |
 | R | Rectangle |
@@ -34,7 +34,7 @@ Tool keys do nothing while you are typing in a text field.
 | Ctrl+Shift+S | Save as... |
 | Ctrl+C / Ctrl+X / Ctrl+V | Copy / cut / paste |
 | Ctrl+D | Duplicate the selection |
-| Ctrl+A | Select every object on the current page |
+| Ctrl+A | Select every object on the current page (edited original text excluded) |
 | Del / Backspace | Delete the selection |
 | Arrow keys | Move the selection (Shift for larger steps) |
 

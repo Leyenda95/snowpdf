@@ -53,3 +53,40 @@ export function boxToFrame(box: PdfBox, rot = 0): Frame {
 export function boxesIntersect(a: PdfBox, b: PdfBox): boolean {
   return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
 }
+
+/** Share (0..1) of the area of `b` that `a` covers. */
+export function boxOverlapRatio(a: PdfBox, b: PdfBox): number {
+  const area = Math.max(0, b[2] - b[0]) * Math.max(0, b[3] - b[1]);
+  if (area <= 0) return 0;
+  const w = Math.min(a[2], b[2]) - Math.max(a[0], b[0]);
+  const h = Math.min(a[3], b[3]) - Math.max(a[1], b[1]);
+  return w > 0 && h > 0 ? (w * h) / area : 0;
+}
+
+/**
+ * Cut `box` so it does not spill over neighbouring boxes (text lines stacked along the axis
+ * perpendicular to the baseline). Each cut lands in the middle of the overlap and never goes
+ * past the centre of `box`. Only for upright or quarter-turned text (rot 0/90/180/270);
+ * other angles come back unchanged.
+ */
+export function trimBoxAgainst(box: PdfBox, others: PdfBox[], rot: number): PdfBox {
+  const r = ((Math.round(rot) % 360) + 360) % 360;
+  if (Math.abs(rot - Math.round(rot)) > 0.5 || r % 90 !== 0) return box;
+  // Stacking axis: y (index 1/3) for 0/180, x (index 0/2) for 90/270.
+  const lo = r % 180 === 0 ? 1 : 0;
+  const hi = lo + 2;
+  const sl = 1 - lo; // along-the-line axis
+  const out: PdfBox = [...box];
+  const centre = (box[lo] + box[hi]) / 2;
+  for (const o of others) {
+    // Must share extent along the line direction and overlap across the stacking axis.
+    if (!(box[sl] < o[sl + 2] && o[sl] < box[sl + 2])) continue;
+    const from = Math.max(box[lo], o[lo]);
+    const to = Math.min(box[hi], o[hi]);
+    if (!(from < to)) continue;
+    const mid = (from + to) / 2;
+    if ((o[lo] + o[hi]) / 2 > centre) out[hi] = Math.min(out[hi], Math.max(mid, centre));
+    else out[lo] = Math.max(out[lo], Math.min(mid, centre));
+  }
+  return out;
+}

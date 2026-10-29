@@ -80,7 +80,9 @@ export function createText(pageId: string, geom: PageGeometry, at: { x: number; 
     align: style.align,
     background: null,
     replaces: null,
+    links: null,
     justifyWidth: null,
+    hScale: 1,
     ...base,
   };
 }

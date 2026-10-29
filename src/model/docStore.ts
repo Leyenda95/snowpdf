@@ -32,6 +32,12 @@ interface DocStoreState {
    * every undo/redo snapshot, so going back finds the result already there.
    */
   patch(recipe: (draft: Draft<DocState>) => void, opts?: { history?: boolean }): void;
+  /**
+   * Take back an object that was just added, leaving no trace: when the latest undo step is the
+   * one that added it, that step is dropped too and `dirty` goes back to `dirtyBefore`.
+   * Returns false (nothing done) when other steps happened since.
+   */
+  dropJustAdded(id: string, dirtyBefore: boolean): boolean;
   undo(): void;
   redo(): void;
   markFormChanged(): void;
@@ -87,6 +93,14 @@ export const useDocStore = create<DocStoreState>((set, get) => ({
       return next.some((d, i) => d !== list[i]) ? next : list;
     };
     set({ doc, past: each(s.past), future: each(s.future) });
+  },
+
+  dropJustAdded: (id, dirtyBefore) => {
+    const s = get();
+    const prev = s.past[s.past.length - 1];
+    if (!prev || prev.objects.some((o) => o.id === id) || !s.doc.objects.some((o) => o.id === id)) return false;
+    set({ doc: prev, past: s.past.slice(0, -1), dirty: dirtyBefore, coalesce: null });
+    return true;
   },
 
   undo: () => {

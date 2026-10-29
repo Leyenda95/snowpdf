@@ -492,6 +492,7 @@ export const en = {
   "No se pudo abrir": "Couldn't open",
   "No se pudo abrir «{name}»": "Couldn't open “{name}”",
   "No se pudo abrir el archivo": "Couldn't open the file",
+  "No se pudo abrir el enlace": "Couldn't open the link",
   "No se pudo abrir el selector de archivos.": "Couldn't open the file picker.",
   "No se pudo abrir en el editor": "Couldn't open in the editor",
   "No se pudo abrir la imagen. Prueba con otro archivo.": "Couldn't open the image. Try another file.",

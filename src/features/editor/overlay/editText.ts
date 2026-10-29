@@ -1,6 +1,9 @@
+import { deleteObjects } from "@/model/docActions";
+import { useDocStore } from "@/model/docStore";
 import { newId } from "@/model/registry";
-import type { FontAsset, FontFamily, PdfBox, TextObject } from "@/model/types";
-import { frameToUser } from "@/pdf/objectGeometry";
+import type { FontAsset, FontFamily, PdfBox, TextLink, TextObject } from "@/model/types";
+import { boxOverlapRatio, frameToUser, trimBoxAgainst } from "@/pdf/objectGeometry";
+import { LINK_LINE_COVERAGE } from "@/pdf/textLinks";
 import { TEXT_PADDING, isSpace, layoutText } from "@/pdf/textLayout";
 import { fontStyleFlags, type PdfjsFont } from "@/render/sourceFonts";
 import type { TextLine } from "@/render/textContent";
@@ -85,6 +88,15 @@ function grow(box: PdfBox, by: number): PdfBox {
   return [box[0] - by, box[1] - by, box[2] + by, box[3] + by];
 }
 
+/**
+ * Zone of the page a line's replacement removes: the line box grown a little, trimmed so it
+ * does not touch the lines around it.
+ */
+export function replacedBoxOf(line: TextLine, neighbours: TextLine[] = []): PdfBox {
+  const others = neighbours.filter((n) => n !== line).map((n) => n.box);
+  return trimBoxAgainst(grow(line.box, 0.4), others, line.frame.rot);
+}
+
 export function createReplacement(
   pageId: string,
   line: TextLine,
@@ -92,25 +104,33 @@ export function createReplacement(
   canvas: HTMLCanvasElement | null,
   font: PdfjsFont | null,
   source: FontAsset | null,
+  neighbours: TextLine[] = [],
+  linkRects: (PdfBox | null)[] = [],
 ): TextObject {
+  const carried = linksOfLine(line, linkRects);
   const fallback = guessFont(line, font);
   const style = {
     ...fallback,
     // The document font is already bold/italic: the fallback must match it.
     ...(source ? { bold: source.bold, italic: source.italic } : {}),
-    size: Math.max(4, Math.round(line.size * 2) / 2),
+    size: Math.max(4, Math.round(line.size * 10) / 10),
     lineHeight: 1.2,
     sourceFont: source?.id ?? null,
     useSourceFont: !!source,
     documentFont: source?.id ?? null,
   };
-  // A line of a justified paragraph is wider than its natural width: keep that width by
-  // stretching the spaces, as the original does.
-  const natural = layoutText({ text: line.text, ...style }).width - 2 * TEXT_PADDING;
+  // The original's horizontal scale (condensed text, Tz) is kept. A justified line is wider
+  // than its natural width: keep that width by stretching the spaces, as the original does.
+  let hScale = line.hScale;
+  const natural = layoutText({ text: line.text, ...style, hScale }).width - 2 * TEXT_PADDING;
   const spaces = [...line.text].filter(isSpace).length;
   const extra = spaces ? (line.frame.w - natural) / spaces : 0;
   const justifyWidth = extra > style.size * 0.02 && extra <= style.size * MAX_JUSTIFY_SPACING ? line.frame.w : null;
-  const lay = layoutText({ text: line.text, ...style, justifyWidth });
+  if (justifyWidth === null && natural > 0 && Math.abs(natural - line.frame.w) / line.frame.w > 0.02) {
+    // Occupy exactly the original's width (also absorbs the fallback font's different metrics).
+    hScale = Math.round(Math.min(2, Math.max(0.5, (line.hScale * line.frame.w) / natural)) * 1000) / 1000;
+  }
+  const lay = layoutText({ text: line.text, ...style, hScale, justifyWidth });
 
   // Colours from the rendered bitmap, inside the line's box.
   let colors = { fg: "#000000", bg: "#ffffff" };
@@ -147,9 +167,49 @@ export function createReplacement(
     text: line.text,
     ...style,
     justifyWidth,
+    hScale,
     color: colors.fg,
     align: "left",
     background: colors.bg,
-    replaces: [grow(line.box, 0.4)],
+    replaces: [replacedBoxOf(line, neighbours)],
+    links: carried.length ? carried : null,
   };
+}
+
+/**
+ * Links the line's replacement carries: its link ranges whose rectangle lies essentially inside
+ * the line (at least LINK_LINE_COVERAGE of its area). `linkRects` is indexed like the boxes the
+ * line was grouped with; null marks a link another replacement already carries.
+ */
+export function linksOfLine(line: TextLine, linkRects: (PdfBox | null)[]): TextLink[] {
+  const area = grow(line.box, 0.4);
+  const out: TextLink[] = [];
+  for (const r of line.linkRanges) {
+    const rect = linkRects[r.box];
+    if (rect && boxOverlapRatio(area, rect) >= LINK_LINE_COVERAGE) out.push({ rect, start: r.start, end: r.end });
+  }
+  return out;
+}
+
+// ------------------------------------------------------------ untouched replacements
+
+/** How each replacement looked when it was created (JSON) and whether the document was already modified. */
+const created = new Map<string, { json: string; dirtyBefore: boolean }>();
+
+/** Remember a just-created replacement, to tell later whether the user changed anything. */
+export function rememberReplacement(obj: TextObject, dirtyBefore: boolean): void {
+  created.set(obj.id, { json: JSON.stringify(obj), dirtyBefore });
+}
+
+/**
+ * When a replacement is identical to how it was created, remove it without leaving an undo
+ * step or a modified flag; if other steps happened meanwhile it is deleted normally. Returns
+ * whether the object was removed. Forgets the snapshot of `obj` either way.
+ */
+export function discardIfUntouched(obj: TextObject): boolean {
+  const snap = created.get(obj.id);
+  created.delete(obj.id);
+  if (!snap || snap.json !== JSON.stringify(obj)) return false;
+  if (!useDocStore.getState().dropJustAdded(obj.id, snap.dirtyBefore)) deleteObjects([obj.id]);
+  return true;
 }

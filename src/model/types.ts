@@ -53,6 +53,13 @@ interface ObjectBase {
   opacity: number;
 }
 
+/** A Link annotation attached to a character range of a text object. */
+export interface TextLink {
+  rect: PdfBox;
+  start: number;
+  end: number;
+}
+
 export interface TextObject extends ObjectBase {
   kind: "text";
   text: string;
@@ -73,6 +80,13 @@ export interface TextObject extends ObjectBase {
    */
   replaces: PdfBox[] | null;
   /**
+   * Link annotations whose text this replacement carries: `rect` is the original rectangle
+   * (user space, normalised) and [start, end) the characters of `text` the link covers. They
+   * follow those characters while typing; on export each link is moved onto its characters
+   * (start === end: the link text was removed, so the link is dropped).
+   */
+  links: TextLink[] | null;
+  /**
    * Font program this text uses (a FontAsset id: a font of the original PDF or one installed
    * on this computer). Characters it lacks fall back to `font`/`bold`/`italic`.
    */
@@ -86,6 +100,11 @@ export interface TextObject extends ObjectBase {
    * edited line of a justified paragraph stays as wide as the original. Null = natural width.
    */
   justifyWidth: number | null;
+  /**
+   * Horizontal scale of the glyphs (1 = normal), like PDF's Tz. Edited text uses it to keep
+   * the width of condensed/expanded originals; it never changes the glyph height.
+   */
+  hScale: number;
 }
 
 export interface ImageObject extends ObjectBase {

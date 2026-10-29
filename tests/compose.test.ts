@@ -66,7 +66,7 @@ function lines(bytes: Uint8Array, pageIndex: number): StextLine[] {
 }
 
 function textObject(pageId: string, text: string, cx: number, cy: number, rot: number, extra: Partial<TextObject> = {}): TextObject {
-  const base = { text, font: "helvetica" as const, bold: false, italic: false, size: 20, lineHeight: 1.2, ...extra };
+  const base = { text, font: "helvetica" as const, bold: false, italic: false, size: 20, lineHeight: 1.2, hScale: 1, ...extra };
   const lay = layoutText(base);
   return {
     id: `t-${text}`,
@@ -78,6 +78,7 @@ function textObject(pageId: string, text: string, cx: number, cy: number, rot: n
     align: "left",
     background: null,
     replaces: null,
+    links: null,
     sourceFont: null,
     useSourceFont: false,
     justifyWidth: null,
@@ -139,6 +140,20 @@ describe("composeDocument", () => {
     // MuPDF rounds bboxes to whole points.
     expect(Math.abs(hola.bbox.x + hola.bbox.w / 2 - 200)).toBeLessThan(2);
     expect(Math.abs(hola.bbox.y + hola.bbox.h / 2 - 100)).toBeLessThan(4);
+  });
+
+  it("exports text with a horizontal scale at that share of the width, same height", async () => {
+    const pages = pageRefs("a", 1);
+    const draw = async (hScale: number) => {
+      const obj = textObject(pages[0].id, "Hola mundo", 300, 400, 0, { hScale });
+      const out = await composeDocument(input({ sources: { a: await labelled(["P1"]) }, pages, objects: [obj] }));
+      return lines(out, 0).find((l) => l.text.includes("Hola"))!;
+    };
+    const normal = await draw(1);
+    const half = await draw(0.5);
+    expect(half.bbox.w / normal.bbox.w).toBeGreaterThan(0.45);
+    expect(half.bbox.w / normal.bbox.w).toBeLessThan(0.55);
+    expect(Math.abs(half.bbox.h - normal.bbox.h)).toBeLessThan(2);
   });
 
   it("redacts for real and replaces existing text", async () => {

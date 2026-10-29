@@ -44,7 +44,7 @@ src/
     tools/                 iLovePDF style batch tool pages
     signature/              Create/save signatures
 tests/                     vitest (Node) for src/pdf/**
-src-tauri/                 Rust shell (dialog + fs plugins, .pdf file association)
+src-tauri/                 Rust shell (dialog + fs + opener plugins, .pdf file association)
 ```
 
 ## 3. Document model (`src/model/types.ts`)
@@ -78,7 +78,9 @@ Screen to PDF conversion uses pdf.js's `PageViewport`
    objects** (keeps forms, links, metadata); copies pages from other sources and merges their
    form fields; applies rotations, crops, and blank pages.
 3. If there are redactions or "edit text" replacements: MuPDF really removes the content under
-   those areas.
+   those areas. In the editor, such edited texts behave as page content in every tool except
+   "Edit text" (no selection frame, clicks fall through to links and page text); only that tool
+   edits, moves (drag) or removes them (right-click menu).
 4. pdf-lib draws the editor objects (text, images, shapes...) into each page's content.
 5. Optional: flatten the form, strip metadata, prune orphan objects, encrypt.
 
@@ -116,7 +118,8 @@ types; in short:
   organize pages, merge, split, compress, rotate, images to/from PDF, watermark, page
   numbering, protect/unlock, metadata, crop, repair.
 - **v0.2**: multi document tabs, OCR (tesseract.js with bundled languages), compare PDFs,
-  notes/comments as annotations, links, bookmarks.
+  notes/comments as annotations, links (edit a link's target URL/destination, create and
+  remove links; today existing links only follow the text that carries them), bookmarks.
 - **v0.3**: PDF to Word/Excel, Office to PDF (local LibreOffice if installed), PDF/A.
 - **Mobile**: `tauri android init` / `tauri ios init`; the UI already uses pointer events.
 

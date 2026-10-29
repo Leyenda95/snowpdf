@@ -226,7 +226,19 @@ export function redact(bytes: Uint8Array, areas: RedactionArea[]): Uint8Array {
         }
         page.applyRedactions(false, image, lineArt, mupdf.PDFPage.REDACT_TEXT_REMOVE);
       };
+      // MuPDF drops the links under a redaction. Replaced text keeps its links (the editor
+      // moves them onto the new text), so put back the ones the replacement pass removed.
+      const linksBefore = list.some((a) => a.mode === "replace")
+        ? page.getLinks().map((l) => ({ bounds: l.getBounds(), uri: l.getURI() }))
+        : [];
       pass("replace", mupdf.PDFPage.REDACT_IMAGE_NONE, mupdf.PDFPage.REDACT_LINE_ART_NONE);
+      if (linksBefore.length) {
+        const key = (b: number[], uri: string) => `${b.map((v) => Math.round(v * 100)).join(",")}|${uri}`;
+        const kept = new Set(page.getLinks().map((l) => key(l.getBounds(), l.getURI())));
+        for (const l of linksBefore) {
+          if (!kept.has(key(l.bounds, l.uri))) page.createLink(l.bounds, l.uri);
+        }
+      }
       pass("erase-vector", mupdf.PDFPage.REDACT_IMAGE_NONE, mupdf.PDFPage.REDACT_LINE_ART_REMOVE_IF_COVERED);
       pass("erase-pixels", mupdf.PDFPage.REDACT_IMAGE_PIXELS, mupdf.PDFPage.REDACT_LINE_ART_REMOVE_IF_COVERED);
       pass("redact", mupdf.PDFPage.REDACT_IMAGE_PIXELS, mupdf.PDFPage.REDACT_LINE_ART_REMOVE_IF_COVERED);
@@ -691,6 +703,44 @@ export function extractText(bytes: Uint8Array): string[] {
   }
 }
 
+/** One glyph of a page, user space: its origin on the baseline and where its advance ends. */
+export interface TextChar {
+  c: string;
+  x: number;
+  y: number;
+  ex: number;
+  ey: number;
+}
+
+/** Every character of a page with exact glyph positions (to cut text runs at link edges). */
+export function textChars(bytes: Uint8Array, pageIndex: number): TextChar[] {
+  const doc = openPdf(bytes);
+  try {
+    const page = doc.loadPage(pageIndex);
+    const inv = mupdf.Matrix.invert(page.getTransform());
+    const map = (x: number, y: number): [number, number] => [inv[0] * x + inv[2] * y + inv[4], inv[1] * x + inv[3] * y + inv[5]];
+    const st = page.toStructuredText("preserve-whitespace");
+    const out: TextChar[] = [];
+    try {
+      st.walk({
+        onChar(c, origin, _font, _size, quad) {
+          // Quad order: upper-left, upper-right, lower-left, lower-right (display space);
+          // the lower edge runs along the baseline from the origin to the end of the advance.
+          const [ox, oy] = map(origin[0], origin[1]);
+          const [ex, ey] = map(origin[0] + (quad[6] - quad[4]), origin[1] + (quad[7] - quad[5]));
+          out.push({ c, x: ox, y: oy, ex, ey });
+        },
+      });
+    } finally {
+      st.destroy();
+      page.destroy();
+    }
+    return out;
+  } finally {
+    doc.destroy();
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Font subsetting
 
@@ -721,6 +771,7 @@ export const workerOps = {
   renderPages: (a: { bytes: Uint8Array; options: RenderPagesOptions }, p?: Progress) => renderPages(a.bytes, a.options, p),
   extractText: (a: { bytes: Uint8Array }) => extractText(a.bytes),
   subsetFonts: (a: { bytes: Uint8Array }) => subsetFonts(a.bytes),
+  textChars: (a: { bytes: Uint8Array; pageIndex: number }) => textChars(a.bytes, a.pageIndex),
   eraseRegion: (a: { bytes: Uint8Array; pageIndex: number; box: PdfBox; maxMethod?: EraseMethod }) => eraseRegion(a.bytes, a.pageIndex, a.box, a),
 };
 

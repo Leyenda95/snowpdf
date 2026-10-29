@@ -56,6 +56,11 @@ function previewFor(page: PageRef, box: PdfBox): Promise<ErasedPreview | null> |
   return hit;
 }
 
+/** Start making the preview of `box` so it is ready when the replacement is created. */
+export function prefetchErasedPreview(page: PageRef, box: PdfBox): void {
+  void previewFor(page, box);
+}
+
 /** The preview of `box` on `page`, or null while it is being made (or when it cannot be). */
 export function useErasedPreview(page: PageRef, box: PdfBox): ErasedPreview | null {
   const [state, setState] = useState<{ key: string; preview: ErasedPreview | null } | null>(null);

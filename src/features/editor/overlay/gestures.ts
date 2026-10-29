@@ -47,20 +47,25 @@ function currentFrames(ids: string[]): Map<string, Frame> {
   return map;
 }
 
-export function moveGesture(e: ReactPointerEvent, ids: string[], geom: PageGeometry): void {
+/** Moves objects with the pointer; `onClick` runs instead when the pointer is released without dragging. */
+export function moveGesture(e: ReactPointerEvent, ids: string[], geom: PageGeometry, onClick?: () => void): void {
   const starts = currentFrames(ids);
   const key = newId("move");
-  drag(e, (dx, dy) => {
-    const d = geom.visible.deltaToUser(dx, dy);
-    updateObjects(
-      ids,
-      (o) => {
-        const s = starts.get(o.id);
-        if (s) o.frame = { ...s, cx: s.cx + d.x, cy: s.cy + d.y };
-      },
-      key,
-    );
-  });
+  drag(
+    e,
+    (dx, dy) => {
+      const d = geom.visible.deltaToUser(dx, dy);
+      updateObjects(
+        ids,
+        (o) => {
+          const s = starts.get(o.id);
+          if (s) o.frame = { ...s, cx: s.cx + d.x, cy: s.cy + d.y };
+        },
+        key,
+      );
+    },
+    onClick ? (moved) => !moved && onClick() : undefined,
+  );
 }
 
 /** hx/hy: -1 left/top, 0 none, 1 right/bottom (in the object's own upright box). */

@@ -83,6 +83,10 @@ export const browserPlatform: Platform = {
     return [];
   },
 
+  async openExternalUrl(url) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  },
+
   async listSystemFonts() {
     return [];
   },

@@ -76,6 +76,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(StartupFiles(Mutex::new(collect_startup_files())))
         .invoke_handler(tauri::generate_handler![take_startup_files, list_system_fonts])
         .run(tauri::generate_context!())

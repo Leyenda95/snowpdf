@@ -12,6 +12,21 @@ function layoutInput(text: string, extra: Partial<TextObject> = {}) {
   return { text, ...HELVETICA, size: 10, lineHeight: 1.2, ...extra };
 }
 
+describe("horizontal scale", () => {
+  it("scales widths but not heights", () => {
+    const one = layoutText(layoutInput("Hola mundo"));
+    const half = layoutText(layoutInput("Hola mundo", { hScale: 0.5 }));
+    expect(half.lines[0].width).toBeCloseTo(one.lines[0].width / 2, 6);
+    expect(half.height).toBeCloseTo(one.height, 6);
+    expect(half.baseline).toBeCloseTo(one.baseline, 6);
+  });
+
+  it("justifies on the scaled width without scaling the extra spacing again", () => {
+    const lay = layoutText(layoutInput("a b c", { hScale: 0.5, justifyWidth: 30 }));
+    expect(lay.lines[0].width).toBeCloseTo(30, 6);
+  });
+});
+
 describe("text layout without a document font (regression)", () => {
   let helvetica: PDFFont;
   let bold: PDFFont;

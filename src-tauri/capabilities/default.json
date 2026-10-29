@@ -1,12 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: native dialogs and reading/writing the PDF files the user works with. The webview only loads bundled local code.",
+  "description": "Main window: native dialogs, opening web links in the default browser and reading/writing the PDF files the user works with. The webview only loads bundled local code.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-destroy",
     "dialog:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://*" }, { "url": "https://*" }, { "url": "mailto:*" }]
+    },
     {
       "identifier": "fs:allow-read-file",
       "allow": [{ "path": "**" }]

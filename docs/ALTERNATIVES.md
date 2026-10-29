@@ -33,6 +33,8 @@ original PDF objects, and a modern interface with dark mode.
   Xournal++ store standard annotations.
 - **Proposal:** export highlights, shapes, ink, and notes as annotations (`/Highlight`,
   `/Square`, `/Ink`, `/Text`...), keeping the current behaviour as a "Flatten" option.
+- **Related gap:** links can be neither edited (URL/destination) nor created or removed; edited
+  text only carries along the links it already had.
 
 ## Medium priority
 

@@ -121,22 +121,27 @@ export class Baker {
           if (obj.background && !obj.replaces) {
             page.drawRectangle({ x: -w / 2, y: -h / 2, width: w, height: h, color: hexToColor(obj.background), opacity });
           }
+          // Horizontal scale: draw in a squeezed coordinate system; layout widths are already
+          // scaled, so x positions are divided by it.
+          const hs = o.hScale ?? 1;
+          if (hs !== 1) page.pushOperators(pushGraphicsState(), concatTransformationMatrix(hs, 0, 0, 1, 0, 0));
           layout.lines.forEach((line, i) => {
             // The standard font cannot encode everything ("?" instead): re-measure those spans.
             const pieces = line.spans.map((span) => {
               if (fonts[span.font] !== standard) return { text: span.text, font: fonts[span.font], width: span.width };
               const encoded = encodableText(standard, span.text);
-              return { text: encoded, font: standard, width: textWidth(encoded, { ...o, useSourceFont: false }, o.size) };
+              return { text: encoded, font: standard, width: textWidth(encoded, { ...o, useSourceFont: false }, o.size) * hs };
             });
             const spacing = (t: string) => [...t].filter(isSpace).length * layout.wordSpacing;
             const lw = pieces.reduce((sum, p) => sum + p.width + spacing(p.text), 0);
             let x = lineStartX(obj.align, w, lw);
             const y = h / 2 - TEXT_PADDING - i * layout.lineHeight - layout.baseline;
             for (const p of pieces) {
-              if (p.text.trim()) page.drawText(p.text, { x, y, size: obj.size, font: p.font, color: hexToColor(obj.color), opacity });
+              if (p.text.trim()) page.drawText(p.text, { x: x / hs, y, size: obj.size, font: p.font, color: hexToColor(obj.color), opacity });
               x += p.width + spacing(p.text);
             }
           });
+          if (hs !== 1) page.pushOperators(popGraphicsState());
           break;
         }
         case "image":

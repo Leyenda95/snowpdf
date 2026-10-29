@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useDocStore } from "@/model/docStore";
 import { usePrefs } from "@/model/prefs";
 import { addObjects, updateObject } from "@/model/docActions";
 import { getAsset, getSource, newId } from "@/model/registry";
-import type { EditorObject, FontAsset, Frame, InkObject, PageRef } from "@/model/types";
-import { boxesIntersect, userToFrame } from "@/pdf/objectGeometry";
+import type { EditorObject, FontAsset, Frame, InkObject, PageRef, PdfBox, TextObject } from "@/model/types";
+import { boxOverlapRatio, boxToFrame, userToFrame } from "@/pdf/objectGeometry";
+import { linkBoxes, normalizeBox, sameBox } from "@/pdf/textLinks";
 import { pdfjsFont, resolveSourceFont, type PdfjsFont } from "@/render/sourceFonts";
-import { getTextRuns, groupLines, type TextLine } from "@/render/textContent";
+import { getTextRuns, groupLines, getPageChars, runNeedsSplit, splitRunsAtBoxes, type TextLine, type TextRun } from "@/render/textContent";
 import { useEditorStore, type EditorTool } from "../editorStore";
 import {
   createEraser,
@@ -22,7 +23,8 @@ import {
   frameStyle,
 } from "../objects";
 import type { PageGeometry } from "../viewer/geometry";
-import { createReplacement } from "./editText";
+import { createReplacement, rememberReplacement, replacedBoxOf } from "./editText";
+import { prefetchErasedPreview } from "./erasedPreview";
 import { drag, moveGesture } from "./gestures";
 import { ObjectContextMenu, useOrderShortcuts } from "./ObjectContextMenu";
 import { ObjectView } from "./ObjectView";
@@ -39,6 +41,41 @@ type Draft =
   | { kind: "rect"; x0: number; y0: number; x1: number; y1: number }
   | { kind: "line"; x0: number; y0: number; x1: number; y1: number }
   | { kind: "ink"; points: number[] };
+
+/** What a click would act on in "edit text" mode: an original line or an existing text object. */
+type EditTarget = { kind: "line"; line: TextLine } | { kind: "object"; obj: TextObject };
+
+/** A line counts as replaced when an edit already covers at least this share of its box. */
+const REPLACED_COVERAGE = 0.5;
+
+/** A Link annotation of the original page: pdf.js annotation id, normalised rect (user space), target URL if any. */
+interface PageLink {
+  id: string;
+  rect: PdfBox;
+  url: string | null;
+}
+
+async function loadPageLinks(sourceId: string, sourceIndex: number): Promise<PageLink[]> {
+  try {
+    const pg = await getSource(sourceId).pdf.getPage(sourceIndex + 1);
+    const anns = await pg.getAnnotations();
+    return anns
+      .filter((a) => a.subtype === "Link" && Array.isArray(a.rect) && a.rect.length === 4)
+      .map((a) => ({ id: String(a.id), rect: normalizeBox(a.rect), url: typeof a.url === "string" ? a.url : null }));
+  } catch {
+    return [];
+  }
+}
+
+/** Lines of a page; runs are cut at the edges of link rectangles so each line knows which characters are links. */
+async function loadLines(sourceId: string, index: number, runs: TextRun[], boxes: PdfBox[]): Promise<TextLine[]> {
+  const needsChars = boxes.length > 0 && runs.some((r) => runNeedsSplit(r, boxes));
+  const chars = needsChars ? await getPageChars(sourceId, index) : [];
+  return groupLines(splitRunsAtBoxes(runs, boxes, chars), boxes);
+}
+
+/** The pdf.js link hover (yellow wash and soft glow), reproduced for the relocated hit areas. */
+const LINK_HOVER = { background: "rgb(255 255 0 / 0.2)", boxShadow: "0 2px 10px rgb(255 255 0 / 0.2)" };
 
 let lastInk: { id: string; pageId: string; at: number } | null = null;
 
@@ -68,7 +105,7 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
   const [draft, setDraft] = useState<Draft | null>(null);
   const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null);
   const [lines, setLines] = useState<TextLine[] | null>(null);
-  const [hoverLine, setHoverLine] = useState<TextLine | null>(null);
+  const [hover, setHover] = useState<EditTarget | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   useOrderShortcuts();
 
@@ -88,35 +125,115 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
   };
   const pageCanvas = () => rootRef.current?.closest(".snow-page")?.querySelector<HTMLCanvasElement>("canvas.snow-page-canvas") ?? null;
 
+  // ---- links of the original page, and the ones carried by edited text
+  const [pageLinks, setPageLinks] = useState<PageLink[]>([]);
+  useEffect(() => {
+    let alive = true;
+    if (!page.sourceId) setPageLinks([]);
+    else void loadPageLinks(page.sourceId, page.sourceIndex).then((ls) => alive && setPageLinks(ls));
+    return () => {
+      alive = false;
+    };
+  }, [page.sourceId, page.sourceIndex]);
+  const [hoverLink, setHoverLink] = useState<string | null>(null);
+
+  // One entry per original link a replacement carries: hit-tested over the characters it covers.
+  const carried = useMemo(() => {
+    const out: { key: string; link: PageLink; box: PdfBox | null }[] = [];
+    for (const o of mine) {
+      if (o.kind !== "text" || !o.links) continue;
+      linkBoxes(o).forEach(({ rect, box }, i) => {
+        const link = pageLinks.find((l) => sameBox(l.rect, rect));
+        if (link) out.push({ key: `${o.id}-${i}`, link, box });
+      });
+    }
+    return out;
+  }, [mine, pageLinks]);
+  const hiddenIds = [...new Set(carried.map((c) => c.link.id))].sort().join("\n");
+
+  // Hide the annotation-layer sections of those links (pdf.js keeps drawing them at the old
+  // rectangle); re-applied whenever the layer is rebuilt (zoom, rotation, page change).
+  useEffect(() => {
+    const layer = rootRef.current?.closest(".snow-page")?.querySelector<HTMLElement>(".annotationLayer");
+    if (!layer || !hiddenIds) return;
+    const ids = new Set(hiddenIds.split("\n"));
+    const sections = () => layer.querySelectorAll<HTMLElement>("[data-annotation-id]");
+    const apply = () => sections().forEach((el) => (el.style.visibility = ids.has(el.dataset.annotationId ?? "") ? "hidden" : ""));
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(layer, { childList: true });
+    return () => {
+      observer.disconnect();
+      sections().forEach((el) => (el.style.visibility = ""));
+    };
+  }, [hiddenIds, page.sourceId, page.sourceIndex]);
+
+  const openLink = (id: string) => {
+    const layer = rootRef.current?.closest(".snow-page")?.querySelector(".annotationLayer");
+    // The hidden original anchor runs the app's link handling (confirmation, navigation).
+    layer?.querySelector<HTMLElement>(`[data-annotation-id="${CSS.escape(id)}"] a`)?.click();
+  };
+
   // ---- text lines for "edit text" and the magic eraser (a click erases the line)
   const linesTool = tool === "editText" || tool === "erase";
   useEffect(() => {
-    setHoverLine(null);
+    setHover(null);
     if (!linesTool || !page.sourceId) {
       setLines(null);
       return;
     }
     let alive = true;
-    getTextRuns(page.sourceId, page.sourceIndex)
-      .then((runs) => alive && setLines(groupLines(runs)))
+    const sourceId = page.sourceId;
+    const linkBoxes = loadPageLinks(sourceId, page.sourceIndex).then((ls) => ls.map((l) => l.rect));
+    Promise.all([getTextRuns(sourceId, page.sourceIndex), linkBoxes])
+      .then(([runs, boxes]) => loadLines(sourceId, page.sourceIndex, runs, boxes))
+      .then((ls) => alive && setLines(ls))
       .catch(() => alive && setLines([]));
     return () => {
       alive = false;
     };
   }, [linesTool, page.sourceId, page.sourceIndex]);
 
-  // The original line of text under a point of the overlay (not one already replaced by an edit).
-  const lineAt = (p: { x: number; y: number }): TextLine | null => {
-    if (!lines) return null;
+  // Original lines of text under a point of the overlay (not ones already replaced by an edit).
+  const linesAt = (p: { x: number; y: number }): { line: TextLine; score: number }[] => {
+    if (!lines) return [];
     const u = geom.visible.toUser(p.x, p.y);
     const replaced = mine.flatMap((o) => (o.kind === "text" && o.replaces ? o.replaces : []));
-    return (
-      lines.find((l) => {
-        const q = userToFrame(l.frame, u);
-        return Math.abs(q.x) <= l.frame.w / 2 + 2 && Math.abs(q.y) <= l.frame.h / 2 && !replaced.some((b) => boxesIntersect(b, l.box));
-      }) ?? null
-    );
+    const found: { line: TextLine; score: number }[] = [];
+    for (const l of lines) {
+      const q = userToFrame(l.frame, u);
+      if (Math.abs(q.x) > l.frame.w / 2 + 2 || Math.abs(q.y) > l.frame.h / 2) continue;
+      if (replaced.some((b) => boxOverlapRatio(b, l.box) >= REPLACED_COVERAGE)) continue;
+      found.push({ line: l, score: Math.abs(q.y) / (l.frame.h / 2) });
+    }
+    return found;
   };
+  const lineAt = (p: { x: number; y: number }): TextLine | null => linesAt(p)[0]?.line ?? null;
+
+  // "Edit text": the line or text object whose centre is closest to the point (objects win ties).
+  const editTargetAt = (p: { x: number; y: number }): EditTarget | null => {
+    const u = geom.visible.toUser(p.x, p.y);
+    let best: { target: EditTarget; score: number } | null = null;
+    for (const o of mine) {
+      if (o.kind !== "text") continue;
+      const q = userToFrame(o.frame, u);
+      if (Math.abs(q.x) > o.frame.w / 2 || Math.abs(q.y) > o.frame.h / 2) continue;
+      const score = Math.abs(q.y) / (o.frame.h / 2);
+      if (!best || score < best.score) best = { target: { kind: "object", obj: o }, score };
+    }
+    for (const c of linesAt(p)) {
+      if (!best || c.score < best.score) best = { target: { kind: "line", line: c.line }, score: c.score };
+    }
+    return best?.target ?? null;
+  };
+
+  // Warm up the preview of the hovered line so the replacement does not flash a flat patch.
+  const hoveredLine = tool === "editText" && hover?.kind === "line" ? hover.line : null;
+  useEffect(() => {
+    if (!hoveredLine || !lines) return;
+    const timer = setTimeout(() => prefetchErasedPreview(page, replacedBoxOf(hoveredLine, lines)), 120);
+    return () => clearTimeout(timer);
+  }, [hoveredLine, lines, page.sourceId, page.sourceIndex]);
 
   // Frame (upright on screen) of a text line grown 0.4 pt, like the one "edit text" replaces.
   const eraseFrameOf = (line: TextLine): Frame => {
@@ -240,9 +357,17 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
       }
       case "editText": {
         e.preventDefault();
-        const line = hoverLine;
+        const target = editTargetAt(p);
+        if (!target) return;
+        if (target.kind === "object") {
+          // A click edits the text, a drag moves it.
+          const id = target.obj.id;
+          moveGesture(e, [id], geom, () => ed.setEditing(id));
+          return;
+        }
+        const line = target.line;
         const sourceId = page.sourceId;
-        if (!line || !sourceId) return;
+        if (!sourceId) return;
         void (async () => {
           // Font lookup never blocks the edit: on any failure the closest standard font is used.
           let font: PdfjsFont | null = null;
@@ -253,9 +378,12 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
           } catch {
             // Keep the fallback.
           }
-          const obj = createReplacement(page.id, line, geom, pageCanvas(), font, source);
+          // Links already carried by another replacement are not claimed twice.
+          const free = pageLinks.map((l) => (carried.some((c) => sameBox(c.link.rect, l.rect)) ? null : l.rect));
+          const obj = createReplacement(page.id, line, geom, pageCanvas(), font, source, lines ?? [], free);
+          rememberReplacement(obj, useDocStore.getState().dirty);
           addObjects([obj]);
-          setHoverLine(null);
+          setHover(null);
           ed.setEditing(obj.id);
         })();
         return;
@@ -396,7 +524,27 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
   const onSurfaceMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     const p = local(e);
     if (placing) setGhost(p);
-    if (linesTool && lines) setHoverLine(lineAt(p));
+    if (linesTool && lines) {
+      if (tool === "editText") setHover(editTargetAt(p));
+      else {
+        const line = lineAt(p);
+        setHover(line ? { kind: "line", line } : null);
+      }
+    }
+  };
+
+  // Right click in "edit text" mode on an edited text: same menu as an object (delete = restore the original).
+  const onSurfaceContext = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (tool !== "editText" || placing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const target = editTargetAt(local(e));
+    if (target?.kind !== "object") return;
+    const ed = useEditorStore.getState();
+    ed.setCurrentPage(index);
+    ed.select([target.obj.id]);
+    window.getSelection()?.removeAllRanges();
+    setMenu({ x: e.clientX, y: e.clientY, ids: [target.obj.id] });
   };
 
   const objectsInteractive = tool === "select" && !placing;
@@ -407,7 +555,7 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
       : tool === "text" || tool === "date"
         ? "text"
         : tool === "editText"
-          ? hoverLine
+          ? hover
             ? "text"
             : "default"
           : "crosshair";
@@ -422,18 +570,43 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
           className="absolute inset-0"
           style={{ pointerEvents: "auto", cursor, touchAction: "none" }}
           onPointerDown={onSurfaceDown}
+          onContextMenu={onSurfaceContext}
           onPointerMove={onSurfaceMove}
           onPointerLeave={() => {
             setGhost(null);
-            setHoverLine(null);
+            setHover(null);
           }}
         />
       )}
 
+      {carried.map((c) => {
+        if (!c.box) return null;
+        const active = tool === "select" && !editingId && !placing;
+        return (
+          <div
+            key={`link-${c.key}`}
+            title={c.link.url ?? undefined}
+            style={{
+              ...frameStyle(boxToFrame(c.box), geom),
+              pointerEvents: active ? "auto" : "none",
+              cursor: active ? "pointer" : undefined,
+              borderRadius: 4,
+              ...(active && hoverLink === c.key ? LINK_HOVER : null),
+            }}
+            onPointerEnter={() => setHoverLink(c.key)}
+            onPointerLeave={() => setHoverLink((cur) => (cur === c.key ? null : cur))}
+            onClick={() => openLink(c.link.id)}
+          />
+        );
+      })}
+
       {mine.map((o) => {
         const editing = editingId === o.id && o.kind === "text";
-        const editableText = o.kind === "text" && (tool === "text" || tool === "editText");
-        const interactive = objectsInteractive || editableText || editing;
+        // With the text tool the object takes the click; "edit text" resolves hits on the surface.
+        // Edited text is page content outside "edit text": clicks fall through to the page (links, text).
+        const pageContent = o.kind === "text" && !!o.replaces && tool !== "editText" && !editing;
+        const editableText = o.kind === "text" && !o.replaces && tool === "text";
+        const interactive = (objectsInteractive && !pageContent) || editableText || editing;
         return (
           <div
             key={o.id}
@@ -486,7 +659,7 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
                   }
                 : undefined
             }
-            onDoubleClick={o.kind === "text" ? () => useEditorStore.getState().setEditing(o.id) : undefined}
+            onDoubleClick={o.kind === "text" && !pageContent ? () => useEditorStore.getState().setEditing(o.id) : undefined}
           >
             {editing ? <TextEditor obj={o} scale={geom.scale} /> : o.kind === "highlight" ? null : <ObjectView obj={o} scale={geom.scale} />}
           </div>
@@ -495,7 +668,7 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
 
       {tool === "select" &&
         !editingId &&
-        mine.filter((o) => selection.includes(o.id)).map((o) => <SelectionFrame key={`sel-${o.id}`} obj={o} geom={geom} overlayEl={rootRef.current} />)}
+        mine.filter((o) => selection.includes(o.id) && !(o.kind === "text" && o.replaces)).map((o) => <SelectionFrame key={`sel-${o.id}`} obj={o} geom={geom} overlayEl={rootRef.current} />)}
 
       {menu && <ObjectContextMenu x={menu.x} y={menu.y} ids={menu.ids} onClose={() => setMenu(null)} />}
 
@@ -507,10 +680,10 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
         />
       ))}
 
-      {hoverLine && (
+      {hover && !(hover.kind === "object" && hover.obj.id === editingId) && (
         <div
           style={{
-            ...frameStyle(hoverLine.frame, geom),
+            ...frameStyle(hover.kind === "line" ? hover.line.frame : (mine.find((m) => m.id === hover.obj.id)?.frame ?? hover.obj.frame), geom),
             pointerEvents: "none",
             outline: "1.5px dashed #0b7cf5",
             background: "rgb(11 124 245 / 0.07)",

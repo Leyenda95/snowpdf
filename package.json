@@ -1,7 +1,7 @@
 {
   "name": "snowpdf",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "SnowPDF: editor y kit de herramientas PDF 100% local (sin subir nada a internet)",
   "type": "module",
   "scripts": {
@@ -26,6 +26,7 @@
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/plugin-dialog": "2.7.3",
     "@tauri-apps/plugin-fs": "2.5.2",
+    "@tauri-apps/plugin-opener": "2.5.5",
     "fflate": "^0.8.3",
     "html-entities": "^2.6.0",
     "immer": "^11.2.9",

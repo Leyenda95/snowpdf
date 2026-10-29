@@ -78,17 +78,18 @@ export interface TextSpan {
 export const isSpace = (ch: string) => ch === " " || ch === "\u00a0";
 
 /**
- * Split a line into spans by font. With word spacing, spans also end after each space so the
+ * Split a line into spans by font. `hScale` multiplies every glyph advance (word spacing does
+ * not get scaled again). With word spacing, spans also end after each space so the
  * export can place every word itself (PDF word spacing does not apply to two-byte fonts).
  */
-export function splitSpans(text: string, chain: GlyphSource[], size: number, wordSpacing = 0): { spans: TextSpan[]; width: number } {
+export function splitSpans(text: string, chain: GlyphSource[], size: number, wordSpacing = 0, hScale = 1): { spans: TextSpan[]; width: number } {
   const spans: TextSpan[] = [];
   let x = 0;
   let cur: TextSpan | null = null;
   let breakNext = false;
   for (const ch of text.normalize("NFC")) {
     const font = chain.findIndex((f, i) => i === chain.length - 1 || f.has(ch));
-    const w = (chain[font].advance(ch) * size) / 1000;
+    const w = (chain[font].advance(ch) * size * hScale) / 1000;
     if (!cur || cur.font !== font || breakNext) {
       cur = { text: "", font, x, width: 0 };
       spans.push(cur);
@@ -131,21 +132,21 @@ export interface TextLayout {
 }
 
 type LayoutInput = Pick<TextObject, "text" | "font" | "bold" | "italic" | "size" | "lineHeight"> &
-  Partial<Pick<TextObject, "sourceFont" | "useSourceFont" | "justifyWidth">>;
+  Partial<Pick<TextObject, "sourceFont" | "useSourceFont" | "justifyWidth" | "hScale">>;
 
 /** Word spacing that stretches a single line to `justifyWidth` (0 when it does not apply). */
 function justifySpacing(o: LayoutInput, chain: GlyphSource[]): number {
   if (!o.justifyWidth || o.text.includes("\n")) return 0;
   const spaces = [...o.text].filter(isSpace).length;
   if (!spaces) return 0;
-  const extra = (o.justifyWidth - splitSpans(o.text, chain, o.size).width) / spaces;
+  const extra = (o.justifyWidth - splitSpans(o.text, chain, o.size, 0, o.hScale ?? 1).width) / spaces;
   return extra > 0 && extra <= o.size * MAX_WORD_SPACING ? extra : 0;
 }
 
 export function layoutText(o: LayoutInput): TextLayout {
   const chain = fontChain(o);
   const wordSpacing = justifySpacing(o, chain);
-  const lines = o.text.split(/\r?\n/).map((text) => ({ text, ...splitSpans(text, chain, o.size, wordSpacing) }));
+  const lines = o.text.split(/\r?\n/).map((text) => ({ text, ...splitSpans(text, chain, o.size, wordSpacing, o.hScale ?? 1) }));
   const lineHeight = o.size * o.lineHeight;
   // CSS sizes line boxes with the first (primary) font of the font-family list.
   const { ascent, descent } = chain[0];

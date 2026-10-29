@@ -8,7 +8,7 @@
 
 A free, 100% local PDF editor. No accounts, no cloud, no ads.
 
-![Version](https://img.shields.io/badge/version-0.1.0-2563eb)
+![Version](https://img.shields.io/badge/version-0.1.1-2563eb)
 ![Platform](https://img.shields.io/badge/platform-Windows-0078d4)
 ![Privacy](https://img.shields.io/badge/network-none-16a34a)
 

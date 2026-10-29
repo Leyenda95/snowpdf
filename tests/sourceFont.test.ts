@@ -35,7 +35,7 @@ function compose(objects: TextObject[], font?: ComposeInput["font"]): Promise<Ui
 
 /** A text object laid out like the editor does, so its frame matches what the export measures. */
 function textObject(text: string, extra: Partial<TextObject> = {}): TextObject {
-  const base = { text, font: "helvetica" as const, bold: false, italic: false, size: 20, lineHeight: 1.2, sourceFont: FONT_ID, useSourceFont: true, justifyWidth: null, ...extra };
+  const base = { text, font: "helvetica" as const, bold: false, italic: false, size: 20, lineHeight: 1.2, sourceFont: FONT_ID, useSourceFont: true, justifyWidth: null, hScale: 1, ...extra };
   const lay = layoutText(base);
   return {
     id: `t-${text}`,
@@ -47,6 +47,7 @@ function textObject(text: string, extra: Partial<TextObject> = {}): TextObject {
     align: "left",
     background: null,
     replaces: null,
+    links: null,
     ...base,
   };
 }

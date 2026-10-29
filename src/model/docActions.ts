@@ -49,6 +49,8 @@ export function duplicateObjects(ids: string[], offset = 12): string[] {
     for (const o of d.objects.filter((x) => set.has(x.id))) {
       const copy = structuredClone(o) as EditorObject;
       copy.id = newId("obj");
+      // A link follows one replacement only.
+      if (copy.kind === "text") copy.links = null;
       copy.frame.cx += offset;
       copy.frame.cy -= offset;
       created.push(copy.id);
