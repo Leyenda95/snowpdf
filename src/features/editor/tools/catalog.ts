@@ -44,11 +44,11 @@ export const GROUP_LABELS: Record<DocToolGroup, Msg> = {
 
 /** Static map: Tailwind only generates classes it can read literally. */
 export const GROUP_ICON_CLASSES: Record<DocToolGroup, string> = {
-  paginas: "text-orange-600 dark:text-orange-300",
-  proteger: "text-sky-600 dark:text-sky-300",
-  optimizar: "text-emerald-600 dark:text-emerald-300",
-  convertir: "text-amber-600 dark:text-amber-300",
-  marcas: "text-fuchsia-600 dark:text-fuchsia-300",
+  paginas: "text-fg",
+  proteger: "text-fg",
+  optimizar: "text-fg",
+  convertir: "text-fg",
+  marcas: "text-fg",
 };
 
 interface EntryBase {

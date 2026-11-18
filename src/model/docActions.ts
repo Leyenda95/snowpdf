@@ -95,6 +95,8 @@ export function rotatePages(pageIds: string[], delta: 90 | 180 | 270): void {
 export function deletePages(pageIds: string[]): void {
   const set = new Set(pageIds);
   apply((d) => {
+    // A document always keeps at least one page.
+    if (d.pages.every((p) => set.has(p.id))) return;
     d.pages = d.pages.filter((p) => !set.has(p.id));
     d.objects = d.objects.filter((o) => !set.has(o.pageId));
   });

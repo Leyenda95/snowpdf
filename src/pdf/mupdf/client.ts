@@ -77,6 +77,12 @@ export function callMupdf<K extends OpName>(
   const id = nextId++;
   return new Promise<OpResult<K>>((resolve, reject) => {
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject, onProgress: opts.onProgress });
-    w.postMessage({ id, op, arg });
+    try {
+      w.postMessage({ id, op, arg });
+    } catch (err) {
+      // An argument that cannot be sent: nothing will ever answer this call.
+      pending.delete(id);
+      reject(err);
+    }
   });
 }

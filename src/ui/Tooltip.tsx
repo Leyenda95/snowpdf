@@ -75,6 +75,9 @@ export function Tooltip({ content, side = "top", children, disabled = false }: T
 
   const show = (immediate = false) => {
     window.clearTimeout(timer.current);
+    // Touch-only devices: no hover, so a tooltip would only pop up when focus returns to a button
+    // (e.g. after closing its menu) and then linger. Labels are visible there anyway.
+    if (typeof window.matchMedia === "function" && window.matchMedia("(hover: none)").matches) return;
     const warm = Date.now() - lastHiddenAt < WARM_WINDOW_MS;
     timer.current = window.setTimeout(() => setOpen(true), immediate || warm ? 0 : SHOW_DELAY_MS);
   };
@@ -131,7 +134,7 @@ export function Tooltip({ content, side = "top", children, disabled = false }: T
             role="tooltip"
             className={cn(
               "pointer-events-none fixed left-0 top-0 z-[70] max-w-xs rounded-md px-2 py-1 text-xs font-medium leading-snug shadow-pop",
-              "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900",
+              "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900",
               "transition-opacity duration-100 motion-reduce:transition-none",
               pos ? "opacity-100" : "opacity-0",
             )}

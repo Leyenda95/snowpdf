@@ -19,13 +19,14 @@ export function sessionPaths(): string[] {
   const paths: string[] = [];
   for (const t of tabs) {
     const path = t.id === activeId ? useDocStore.getState().filePath : t.doc?.filePath;
-    if (path && !paths.includes(path)) paths.push(path);
+    if (path && !path.startsWith("content://") && !paths.includes(path)) paths.push(path);
   }
   return paths;
 }
 
 export function saveSession(paths: string[]): void {
   try {
+    paths = paths.filter((p) => !p.startsWith("content://"));
     if (paths.length && usePrefs.getState().restoreTabs) localStorage.setItem(SESSION_KEY, JSON.stringify(paths));
     else localStorage.removeItem(SESSION_KEY);
   } catch {

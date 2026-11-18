@@ -31,11 +31,11 @@ export function Checkbox({ checked, onChange, label, disabled, className }: Chec
           aria-hidden
           className={cn(
             "absolute inset-0 rounded-[5px] border border-line-strong bg-surface transition-colors",
-            "peer-hover:border-subtle peer-checked:border-brand-600 peer-checked:bg-brand-600 dark:peer-checked:border-brand-500 dark:peer-checked:bg-brand-500",
+            "peer-hover:border-subtle peer-checked:border-primary peer-checked:bg-primary",
             "peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/50 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-surface",
           )}
         />
-        {checked && <Check size={12} strokeWidth={3.5} aria-hidden className="pointer-events-none relative text-white" />}
+        {checked && <Check size={12} strokeWidth={3.5} aria-hidden className="pointer-events-none relative text-on-primary" />}
       </span>
       {label && <span className="text-sm leading-5 text-fg">{label}</span>}
     </label>

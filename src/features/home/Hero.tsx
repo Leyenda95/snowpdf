@@ -1,72 +1,96 @@
-import { Fragment } from "react";
-import { FileUp, ShieldCheck, Snowflake } from "lucide-react";
-import { Dropzone } from "@/ui";
+import { FileUp, FolderOpen, ScanLine } from "lucide-react";
+import { BrandMark, Dropzone } from "@/ui";
 import { Wordmark } from "@/features/shell/Wordmark";
+import { startScan } from "@/features/scan/scanActions";
 import { openDroppedFiles, pickAndOpenPdfs } from "./actions";
 import { t, type Msg } from "@/i18n";
 
-const TAGLINE: Msg[] = ["Ver", "Editar", "Organizar"];
+const TAGLINE: Msg[] = ["Ver", "Editar", "Construir"];
+
+/** The promise of the app, set like a footnote: a rule and the asterisk of the logotype. */
+function Footnote({ className }: { className?: string }) {
+  return (
+    <div className={className}>
+      <div aria-hidden className="h-px bg-rule" />
+      <p className="mt-3 flex items-start gap-2 text-xs font-semibold text-fg md:text-[13px]">
+        <BrandMark className="mt-[0.15em] size-3.5 text-brand-500" />
+        <span className="text-balance">{t("Procesamiento 100 % local · Sin subidas · Sin cuentas")}</span>
+      </p>
+    </div>
+  );
+}
+
+/** Phone hero: the tagline as a headline, one big "open" button and the footnote (no drop zone on a touch screen). */
+function PhoneHero() {
+  return (
+    <section className="flex flex-col pb-2 pt-3 md:hidden">
+      <h1 className="sr-only">SnowPDF</h1>
+      <p className="font-display text-[2.75rem] font-extrabold leading-[0.95] tracking-tight text-fg">
+        {TAGLINE.map((word) => (
+          <span key={word} className="block">
+            {t(word)}.
+          </span>
+        ))}
+      </p>
+      <button
+        type="button"
+        onClick={() => void pickAndOpenPdfs()}
+        className="mt-7 inline-flex h-14 w-full items-center justify-center gap-2.5 rounded-2xl bg-primary text-base font-semibold text-on-primary outline-none transition-colors active:bg-primary-hover focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+      >
+        <FolderOpen size={22} aria-hidden />
+        {t("Abrir PDF")}
+      </button>
+      <button
+        type="button"
+        onClick={() => startScan()}
+        className="mt-3 inline-flex h-12 w-full items-center justify-center gap-2.5 rounded-2xl border border-rule bg-surface text-base font-semibold text-fg outline-none transition-colors active:bg-surface-2 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-app"
+      >
+        <ScanLine size={22} aria-hidden />
+        {t("Escanear documento")}
+      </button>
+      <Footnote className="mt-6" />
+    </section>
+  );
+}
 
 export function Hero() {
   return (
-    <section className="relative isolate overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
-      {/* Decoration: soft glows and a faint snowflake watermark. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-24 -top-28 -z-10 size-[26rem] rounded-full bg-brand-300/30 blur-3xl dark:bg-brand-500/15"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-36 -left-28 -z-10 size-[26rem] rounded-full bg-sky-200/40 blur-3xl dark:bg-brand-700/20"
-      />
-      <Snowflake
-        aria-hidden
-        strokeWidth={1}
-        className="pointer-events-none absolute -bottom-12 right-8 -z-10 size-64 text-brand-500/[0.07] dark:text-brand-300/[0.06]"
-      />
+    <>
+      <PhoneHero />
+      <DesktopHero />
+    </>
+  );
+}
 
-      <div className="grid items-center gap-8 px-6 py-8 sm:px-10 sm:py-10 lg:grid-cols-2">
-        <div className="flex flex-col items-center text-center">
-          <h1 className="flex items-center gap-3 sm:gap-4">
-            <img src="/snowpdf.svg" alt="" aria-hidden draggable={false} className="size-12 shrink-0 drop-shadow-sm sm:size-16" />
-            <Wordmark className="h-10 sm:h-12" />
-          </h1>
-          <p className="mt-4 text-lg font-medium tracking-tight text-muted sm:text-xl">
-            {TAGLINE.map((word, i) => (
-              <Fragment key={word}>
-                {i > 0 && (
-                  <span aria-hidden className="mx-2.5 font-bold text-brand-500">
-                    ·
-                  </span>
-                )}
-                {t(word)}
-              </Fragment>
-            ))}
-          </p>
-          <p className="mt-6 inline-flex items-center gap-2 rounded-full border border-line bg-surface/80 py-1.5 pl-3 pr-3.5 text-sm text-muted">
-            <ShieldCheck size={16} aria-hidden className="shrink-0 text-emerald-600 dark:text-emerald-400" />
-            {t("Procesamiento 100 % local · Sin subidas · Sin cuentas")}
-          </p>
-        </div>
-
-        <Dropzone
-          accept={["pdf"]}
-          multiple
-          onFiles={openDroppedFiles}
-          onBrowse={() => void pickAndOpenPdfs()}
-          className="min-h-44 gap-3 px-8"
-        >
-          <span className="grid size-12 place-items-center rounded-2xl bg-brand-50 text-brand-600 ring-1 ring-brand-100 dark:bg-brand-500/15 dark:text-brand-200 dark:ring-brand-500/25">
-            <FileUp size={24} aria-hidden />
-          </span>
-          <span className="flex flex-col gap-1">
-            <span className="text-balance text-base font-semibold text-fg">
-              {t("Arrastra aquí tus PDF o haz clic para elegirlos")}
-            </span>
-            <span className="text-sm text-muted">{t("Puedes abrir varios a la vez.")}</span>
-          </span>
-        </Dropzone>
+function DesktopHero() {
+  return (
+    <section className="grid items-stretch gap-8 max-md:hidden lg:grid-cols-2">
+      <div className="flex min-w-0 flex-col justify-between gap-8 py-1">
+        <h1>
+          <Wordmark className="h-11 xl:h-[3.25rem]" />
+        </h1>
+        <p className="font-display text-2xl font-semibold tracking-tight text-fg">{TAGLINE.map((word) => `${t(word)}.`).join(" ")}</p>
+        <Footnote />
       </div>
+
+      <Dropzone
+        accept={["pdf"]}
+        multiple
+        onFiles={openDroppedFiles}
+        onBrowse={() => void pickAndOpenPdfs()}
+        className="min-h-60 items-start! justify-end! gap-4! rounded-lg! p-7! text-left!"
+      >
+        <span className="grid size-12 place-items-center rounded-lg bg-brand-500 text-ink">
+          <FileUp size={24} aria-hidden />
+        </span>
+        <span className="flex flex-col gap-1.5">
+          <span className="text-balance font-display text-2xl font-bold leading-tight tracking-tight text-fg">
+            <span className="pointer-coarse:hidden">{t("Arrastra aquí tus PDF o haz clic para elegirlos")}</span>
+            <span className="hidden pointer-coarse:inline">{t("Toca aquí para elegir tus PDF")}</span>
+          </span>
+          <span className="text-sm text-muted">{t("Puedes abrir varios a la vez.")}</span>
+        </span>
+      </Dropzone>
     </section>
   );
 }

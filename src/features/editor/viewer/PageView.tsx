@@ -16,12 +16,56 @@ import { SnowLinkService } from "@/render/linkService";
 import { attachTextSelection } from "@/render/textSelection";
 import { pageGeometry, type PageGeometry } from "./geometry";
 import { t } from "@/i18n";
+import { useIsMobile } from "@/ui";
+import { subscribeViewerScroll, viewerZoom } from "./viewerScroll";
 
 const MAX_CANVAS_PIXELS = 4096 * 4096;
-
-function outputScaleFor(width: number, height: number): number {
+/**
+ * Phone: the full-page bitmap is capped at about one screen's worth of device pixels (a page at
+ * fit width never exceeds it). Zooming in then keeps that bitmap as a backdrop and only the visible
+ * region is redrawn sharp (detail canvas), instead of re-rendering whole pages at every zoom.
+ */
+function phoneCanvasCap(): number {
   const dpr = window.devicePixelRatio || 1;
-  return Math.min(dpr, Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, width * height)));
+  return Math.max(2 ** 21, window.innerWidth * window.innerHeight * dpr * dpr);
+}
+/** Detail canvas: margin around the viewport (fraction of it, each side) and refresh slack. */
+const DETAIL_MARGIN = 0.15;
+const DETAIL_SLACK = 0.05;
+const DETAIL_DEBOUNCE_MS = 150;
+const MAX_DETAIL_PIXELS = 2 ** 23;
+
+function outputScaleFor(width: number, height: number, maxPixels = MAX_CANVAS_PIXELS): number {
+  const dpr = window.devicePixelRatio || 1;
+  return Math.min(dpr, Math.sqrt(maxPixels / Math.max(1, width * height)));
+}
+
+/** High-resolution bitmap of part of a page, in CSS px of the page at `zoom`. */
+interface DetailBitmap {
+  canvas: HTMLCanvasElement;
+  zoom: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  out: number;
+}
+
+function placeDetail(d: DetailBitmap, zoom: number): void {
+  const k = zoom / d.zoom;
+  const { canvas } = d;
+  canvas.style.left = `${d.x * k}px`;
+  canvas.style.top = `${d.y * k}px`;
+  // The region's exact CSS size (the bitmap was rounded to whole pixels): stays aligned with the text layer.
+  canvas.style.width = `${d.w * k}px`;
+  canvas.style.height = `${d.h * k}px`;
+}
+
+/** True while a pinch / double-tap preview scales the content: detail renders wait. */
+function viewerBusy(scroller: HTMLElement): boolean {
+  // A double-tap animation, or a pinch preview (CSS-scaled content).
+  const content = scroller.firstElementChild as HTMLElement | null;
+  return viewerZoom.animating || (!!content && content.style.transform !== "");
 }
 
 /**
@@ -44,6 +88,8 @@ interface PageBitmap {
   zoom: number;
   /** Bitmap pixels per CSS px (the device pixel ratio unless the canvas size was capped). */
   out: number;
+  /** What it shows (source page, rotation, pixel ratio): a different key always re-renders. */
+  key: string;
 }
 
 /**
@@ -131,6 +177,12 @@ export const PageView = memo(function PageView(props: PageViewProps) {
   const callbacks = useRef(props);
   callbacks.current = props;
   const [renderZoom, setRenderZoom] = useState(zoom);
+  const phone = useIsMobile();
+  // Phone: read at enqueue time, so a page scrolling into view doesn't restart its render.
+  const priorityRef = useRef(priority);
+  priorityRef.current = priority;
+  const detail = useRef<DetailBitmap | null>(null);
+  const scheduleDetail = useRef<() => void>(() => undefined);
   const [error, setError] = useState<string | null>(null);
   const bitmap = useRef<PageBitmap | null>(null);
   const zoomRef = useRef(zoom);
@@ -140,12 +192,15 @@ export const PageView = memo(function PageView(props: PageViewProps) {
 
   useLayoutEffect(() => {
     if (bitmap.current) placeBitmap(bitmap.current, zoom);
+    if (detail.current) placeDetail(detail.current, zoom);
   }, [zoom, dpr]);
 
   // Zooming stretches the current bitmap instantly; the sharp re-render waits for a pause.
   useEffect(() => {
     if (zoom === renderZoom) return;
-    const t = setTimeout(() => setRenderZoom(zoom), 160);
+    // Desktop: wait for a pause (Ctrl+wheel zooms continuously). Phone zooms are committed once,
+    // when the pinch or double tap ends, so the sharp render can start right away.
+    const t = setTimeout(() => setRenderZoom(zoom), phone ? 0 : 160);
     return () => clearTimeout(t);
   }, [zoom, renderZoom]);
 
@@ -156,7 +211,19 @@ export const PageView = memo(function PageView(props: PageViewProps) {
     if (!active || !page.sourceId) {
       host.replaceChildren();
       bitmap.current = null;
+      detail.current = null;
       return;
+    }
+    const key = `${page.sourceId}:${page.sourceIndex}:${rotation}:${dpr}`;
+    const prev = bitmap.current;
+    if (phone && prev && prev.key === key) {
+      // Phone: keep the current bitmap when a re-render would give about the same number of pixels
+      // (it's capped): the detail canvas provides the sharpness. Typical for every zoom past fit width.
+      const k = renderZoom / prev.zoom;
+      const cssArea = (prev.canvas.width / prev.out) * (prev.canvas.height / prev.out) * k * k;
+      const target = Math.min(cssArea * dpr * dpr, phoneCanvasCap());
+      const have = prev.canvas.width * prev.canvas.height;
+      if (have >= 0.6 * target && have <= 2 * target) return;
     }
     let cancelled = false;
     let task: RenderTask | null = null;
@@ -165,7 +232,7 @@ export const PageView = memo(function PageView(props: PageViewProps) {
       const pdfPage = await getSource(page.sourceId!).pdf.getPage(page.sourceIndex + 1);
       if (cancelled) return;
       const viewport = pdfPage.getViewport({ scale: renderZoom * PDF_TO_CSS, rotation });
-      const out = outputScaleFor(viewport.width, viewport.height);
+      const out = outputScaleFor(viewport.width, viewport.height, phone ? phoneCanvasCap() : MAX_CANVAS_PIXELS);
       const canvas = document.createElement("canvas");
       canvas.className = "snow-page-canvas";
       canvas.width = Math.max(1, layoutExactSize(Math.floor(viewport.width * out), out));
@@ -179,11 +246,14 @@ export const PageView = memo(function PageView(props: PageViewProps) {
       await task.promise;
       if (!cancelled) {
         host.replaceChildren(canvas);
-        bitmap.current = { canvas, zoom: renderZoom, out };
+        bitmap.current = { canvas, zoom: renderZoom, out, key };
         placeBitmap(bitmap.current, zoomRef.current);
+        // Keep the previous detail (scaled) until the new one replaces it.
+        if (detail.current) host.appendChild(detail.current.canvas);
+        scheduleDetail.current();
         setError(null);
       }
-    }, priority);
+    }, phone ? priorityRef.current : priority);
     job.promise.catch((err) => {
       if (!cancelled && !(err instanceof RenderingCancelledException)) setError(err instanceof Error ? err.message : String(err));
     });
@@ -192,7 +262,117 @@ export const PageView = memo(function PageView(props: PageViewProps) {
       job.cancel();
       task?.cancel();
     };
-  }, [active, page.sourceId, page.sourceIndex, rotation, renderZoom, priority, dpr]);
+  }, [active, page.sourceId, page.sourceIndex, rotation, renderZoom, phone ? 0 : priority, dpr, phone]);
+
+  // ---- phone: sharp canvas for the part of the page on screen (the base canvas is capped)
+  useEffect(() => {
+    const host = hostRef.current;
+    const scroller = host?.closest<HTMLElement>("[data-viewer-scroll]");
+    if (!phone || !active || !page.sourceId || !host || !scroller) {
+      scheduleDetail.current = () => undefined;
+      return;
+    }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let job: { cancel(): void } | null = null;
+    let task: RenderTask | null = null;
+    const dropDetail = () => {
+      if (!detail.current) return;
+      detail.current.canvas.remove();
+      detail.current = null;
+    };
+    const cancelRender = () => {
+      job?.cancel();
+      task?.cancel();
+      job = null;
+      task = null;
+    };
+
+    /** Visible part of the page (CSS px of the page at the current zoom), grown by `grow` of the viewport. */
+    const visibleRegion = (grow: number) => {
+      const hr = host.getBoundingClientRect();
+      const sr = scroller.getBoundingClientRect();
+      const gx = sr.width * grow;
+      const gy = sr.height * grow;
+      const left = Math.max(sr.left - gx, hr.left);
+      const top = Math.max(sr.top - gy, hr.top);
+      const right = Math.min(sr.right + gx, hr.right);
+      const bottom = Math.min(sr.bottom + gy, hr.bottom);
+      if (right <= left || bottom <= top) return null;
+      return { x0: left - hr.left, y0: top - hr.top, x1: right - hr.left, y1: bottom - hr.top };
+    };
+
+    const check = () => {
+      timer = null;
+      if (cancelled) return;
+      const base = bitmap.current;
+      // Wait for the zoom to settle (the base bitmap may be one drawn at another zoom, see above).
+      if (!base || zoomRef.current !== renderZoom) return;
+      if (viewerBusy(scroller)) {
+        timer = setTimeout(check, DETAIL_DEBOUNCE_MS);
+        return;
+      }
+      const dprNow = window.devicePixelRatio || 1;
+      // Base bitmap pixels per CSS px at this zoom.
+      const baseOut = (base.out * base.zoom) / renderZoom;
+      const need = baseOut >= dprNow - 0.01 ? null : visibleRegion(DETAIL_SLACK);
+      if (!need) {
+        cancelRender();
+        dropDetail();
+        return;
+      }
+      const d = detail.current;
+      if (d && d.zoom === renderZoom && need.x0 >= d.x && need.y0 >= d.y && need.x1 <= d.x + d.w && need.y1 <= d.y + d.h) return;
+      const want = visibleRegion(DETAIL_MARGIN)!;
+      const x = Math.floor(want.x0);
+      const y = Math.floor(want.y0);
+      const w = Math.max(1, Math.ceil(want.x1) - x);
+      const h = Math.max(1, Math.ceil(want.y1) - y);
+      cancelRender();
+      const q = enqueueRender(async () => {
+        if (cancelled) return;
+        const pdfPage = await getSource(page.sourceId!).pdf.getPage(page.sourceIndex + 1);
+        if (cancelled) return;
+        const viewport = pdfPage.getViewport({ scale: renderZoom * PDF_TO_CSS, rotation });
+        const out = Math.min(dprNow, Math.sqrt(MAX_DETAIL_PIXELS / (w * h)));
+        const canvas = document.createElement("canvas");
+        canvas.className = "snow-page-detail";
+        canvas.width = Math.max(1, Math.round(w * out));
+        canvas.height = Math.max(1, Math.round(h * out));
+        const rt = pdfPage.render({
+          canvas,
+          viewport,
+          transform: [out, 0, 0, out, -x * out, -y * out],
+          annotationMode: AnnotationMode.ENABLE_FORMS,
+        });
+        task = rt;
+        await rt.promise;
+        if (cancelled) return;
+        const next: DetailBitmap = { canvas, zoom: renderZoom, x, y, w, h, out };
+        placeDetail(next, zoomRef.current);
+        detail.current?.canvas.remove();
+        host.appendChild(canvas);
+        detail.current = next;
+      }, 0);
+      job = q;
+      q.promise.catch(() => undefined);
+    };
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(check, DETAIL_DEBOUNCE_MS);
+    };
+    scheduleDetail.current = schedule;
+    const unsubscribe = subscribeViewerScroll(schedule);
+    // A new zoom: look for a detail now (scrolling still debounces).
+    if (bitmap.current) check();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      cancelRender();
+      unsubscribe();
+      scheduleDetail.current = () => undefined;
+    };
+  }, [phone, active, page.sourceId, page.sourceIndex, rotation, renderZoom, dpr]);
 
   // ---- text layer (selection, highlight and edit-text tools, search)
   useEffect(() => {
@@ -311,7 +491,7 @@ export const PageView = memo(function PageView(props: PageViewProps) {
         {underlay && <div className="pointer-events-none absolute inset-0">{underlay(geom)}</div>}
       </div>
       {error && (
-        <div className="absolute inset-x-4 top-4 z-[4] rounded-lg bg-rose-50 p-3 text-sm text-rose-700 shadow">
+        <div className="absolute inset-x-4 top-4 z-[4] rounded-lg bg-rose-50 p-3 text-sm text-rose-700 shadow dark:bg-rose-950 dark:text-rose-200">
           {t("No se pudo dibujar esta página:")} {error}
         </div>
       )}

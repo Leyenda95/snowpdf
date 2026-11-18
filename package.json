@@ -1,7 +1,7 @@
 {
   "name": "snowpdf",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "SnowPDF: editor y kit de herramientas PDF 100% local (sin subir nada a internet)",
   "type": "module",
   "scripts": {

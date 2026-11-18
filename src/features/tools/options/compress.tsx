@@ -35,14 +35,14 @@ function CompressOptions({ options, onChange, disabled }: OptionsProps<CompressT
               className={cn(
                 "flex items-start gap-3 rounded-xl border p-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-500/50 disabled:cursor-not-allowed",
                 selected
-                  ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10"
-                  : "border-line-strong bg-surface hover:border-brand-400 hover:bg-surface-2",
+                  ? "border-fg bg-surface-2"
+                  : "border-line-strong bg-surface hover:border-fg hover:bg-surface-2",
               )}
             >
               <span
                 className={cn(
                   "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border",
-                  selected ? "border-brand-600 bg-brand-600 text-white dark:border-brand-500 dark:bg-brand-500" : "border-line-strong bg-surface",
+                  selected ? "border-primary bg-primary text-on-primary" : "border-line-strong bg-surface",
                 )}
               >
                 {selected && <Check size={12} strokeWidth={3.5} aria-hidden />}

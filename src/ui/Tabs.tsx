@@ -54,7 +54,7 @@ export function Tabs<T extends string>({ value, onChange, tabs, className }: Tab
               "relative -mb-px inline-flex h-10 select-none items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm font-medium outline-none transition-colors",
               "focus-visible:rounded-t-lg focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/50",
               selected
-                ? "border-brand-600 text-fg dark:border-brand-400"
+                ? "border-brand-500 text-fg"
                 : "border-transparent text-muted hover:border-line-strong hover:text-fg",
             )}
           >

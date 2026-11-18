@@ -3,7 +3,7 @@ import { useAppStore } from "@/model/appStore";
 import { openDocuments } from "@/model/workspace";
 import { platform } from "@/platform";
 import { useEditorStore, type EditorTool } from "@/features/editor/editorStore";
-import { DOC_TOOLS, GROUP_ICON_CLASSES, GROUP_LABELS, type DocToolGroup } from "@/features/editor/tools/catalog";
+import { DOC_TOOLS, GROUP_LABELS, type DocToolGroup } from "@/features/editor/tools/catalog";
 import type { BatchToolId } from "@/features/tools/registry";
 import { toast } from "@/ui";
 import { t, type Msg } from "@/i18n";
@@ -41,7 +41,7 @@ function editorTool(id: string, label: Msg, icon: LucideIcon, tool: EditorTool, 
   return {
     id, label, icon, keywords,
     group: "Editar y firmar",
-    iconClass: "text-brand-600 dark:text-brand-300",
+    iconClass: "text-fg",
     run: async () => {
       if (!(await pickOne(t(label)))) return;
       const ed = useEditorStore.getState();
@@ -55,7 +55,7 @@ function batchTool(id: BatchToolId, label: Msg, icon: LucideIcon, keywords: Msg[
   return {
     id, label, icon, keywords,
     group: "Crear",
-    iconClass: "text-violet-600 dark:text-violet-300",
+    iconClass: "text-fg",
     run: async () => useAppStore.getState().navigate({ name: "tool", toolId: id }),
   };
 }
@@ -80,7 +80,7 @@ export const HOME_TOOLS: HomeToolEntry[] = [
         id: tool.id,
         label: tool.label,
         icon: tool.icon,
-        iconClass: GROUP_ICON_CLASSES[tool.group],
+        iconClass: "text-fg",
         group: GROUP_LABELS[tool.group],
         keywords: tool.keywords,
         run: async () => {

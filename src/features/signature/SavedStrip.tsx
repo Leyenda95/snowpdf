@@ -10,7 +10,7 @@ export interface SavedStripProps {
   onRemove: (item: SavedSignature) => void;
 }
 
-/** Row of previously saved signatures. Click selects, the small X (on hover / focus) deletes. */
+/** Row of previously saved signatures. Click selects, the small X (on hover / focus; always shown on touch) deletes. */
 export function SavedStrip({ items, onPick, onRemove }: SavedStripProps) {
   if (items.length === 0) return null;
   return (
@@ -38,7 +38,7 @@ export function SavedStrip({ items, onPick, onRemove }: SavedStripProps) {
                 variant="subtle"
                 tooltipSide="top"
                 onClick={() => onRemove(item)}
-                className="absolute -right-1.5 -top-1.5 size-5 opacity-0 shadow transition-opacity focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 [&>svg]:size-3"
+                className="absolute -right-1.5 -top-1.5 size-5 opacity-0 shadow transition-opacity [@media(hover:none)]:opacity-100 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 [&>svg]:size-3"
               />
             </li>
           );

@@ -40,7 +40,7 @@ function ImagesToPdfOptions({ options, onChange, disabled }: OptionsProps<Images
           { value: "portrait", label: t("Vertical") },
           { value: "landscape", label: t("Horizontal") },
         ]}
-        className={fit || disabled ? "pointer-events-none opacity-50" : undefined}
+        disabled={fit || disabled}
       />
       <SegmentedControl<Margin>
         label={t("Margen")}
@@ -53,7 +53,7 @@ function ImagesToPdfOptions({ options, onChange, disabled }: OptionsProps<Images
           { value: "18", label: t("Pequeño") },
           { value: "36", label: t("Grande") },
         ]}
-        className={disabled ? "pointer-events-none opacity-50" : undefined}
+        disabled={disabled}
       />
       <Switch
         label={t("Un PDF por imagen")}

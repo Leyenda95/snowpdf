@@ -6,6 +6,7 @@ import { createPdf, loadPdf, savePdf } from "./docUtils";
 import { frameBBox } from "./objectGeometry";
 import { pruneUnreachable } from "./prune";
 import { linkBoxes, normalizeBox, sameBox } from "./textLinks";
+import { flattenFormInPlace } from "./tools/flatten";
 import type { RedactionArea } from "./mupdf/ops";
 import { t } from "@/i18n";
 
@@ -81,7 +82,8 @@ function dropOrphanFields(doc: PDFDocument, pages: PDFPage[]): void {
     const dict = doc.context.lookup(ref);
     if (!(dict instanceof PDFDict)) return false;
     const kids = lookupAs(dict, "Kids", PDFArray);
-    if (!kids) return liveWidgets.has(ref);
+    // A field with no widget of its own (data, calculations) was never on a page: it stays.
+    if (!kids) return liveWidgets.has(ref) || dict.get(PDFName.of("Subtype")) !== PDFName.of("Widget");
     for (let i = kids.size() - 1; i >= 0; i--) {
       const kid = kids.get(i);
       if (!(kid instanceof PDFRef) || !prune(kid)) kids.remove(i);
@@ -231,9 +233,7 @@ export async function composeDocument(input: ComposeInput): Promise<Uint8Array> 
   }
 
   // 5. Finishing.
-  if (input.flattenForms && doc.catalog.has(PDFName.of("AcroForm"))) {
-    doc.getForm().flatten({ updateFieldAppearances: false });
-  }
+  if (input.flattenForms) await flattenFormInPlace(doc);
   if (input.stripMetadata) {
     const info = doc.context.lookup(doc.context.trailerInfo.Info);
     if (info instanceof PDFDict) for (const key of info.keys()) info.delete(key);

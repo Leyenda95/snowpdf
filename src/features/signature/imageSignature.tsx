@@ -112,7 +112,10 @@ export function ImageSignature({ onSourceChange }: ImageSignatureProps) {
           {loading ? <Loader size={22} className="animate-spin" aria-hidden /> : <ImagePlus size={22} aria-hidden />}
         </div>
         <div className="flex flex-col gap-0.5">
-          <p className="text-sm font-medium text-fg">{t("Arrastra una foto de tu firma o haz clic para elegirla")}</p>
+          <p className="text-sm font-medium text-fg">
+            <span className="pointer-coarse:hidden">{t("Arrastra una foto de tu firma o haz clic para elegirla")}</span>
+            <span className="hidden pointer-coarse:inline">{t("Toca aquí para elegir una foto de tu firma")}</span>
+          </p>
           <p className="text-xs text-subtle">{t("Mejor sobre papel blanco y con buena luz. Admite PNG, JPG, WEBP, GIF y BMP.")}</p>
         </div>
       </Dropzone>

@@ -210,7 +210,7 @@ export function Menu({ trigger, items, align = "start", side = "bottom" }: MenuP
                     if (document.activeElement !== e.currentTarget) e.currentTarget.focus({ preventScroll: true });
                   }}
                   className={cn(
-                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm outline-none transition-colors",
+                    "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm outline-none transition-colors pointer-coarse:min-h-10",
                     "disabled:cursor-not-allowed disabled:opacity-45",
                     entry.danger
                       ? "text-red-600 focus:bg-red-50 dark:text-red-400 dark:focus:bg-red-500/10"
@@ -223,7 +223,7 @@ export function Menu({ trigger, items, align = "start", side = "bottom" }: MenuP
                     </span>
                   )}
                   <span className="min-w-0 flex-1 truncate">{entry.label}</span>
-                  {entry.shortcut && <span className="ml-4 shrink-0 text-xs text-subtle">{keyLabel(entry.shortcut)}</span>}
+                  {entry.shortcut && <span className="ml-4 shrink-0 text-xs text-subtle pointer-coarse:hidden">{keyLabel(entry.shortcut)}</span>}
                   {checkable && (
                     <span className="grid size-4 shrink-0 place-items-center text-brand-600 dark:text-brand-300">
                       {entry.checked && <Check size={16} aria-hidden />}

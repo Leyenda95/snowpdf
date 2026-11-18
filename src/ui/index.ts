@@ -4,6 +4,10 @@ export { Button, type ButtonProps, type ButtonSize, type ButtonVariant } from ".
 export { IconButton, type IconButtonProps, type IconButtonSize, type IconButtonVariant } from "./IconButton";
 export { Tooltip, type TooltipProps } from "./Tooltip";
 export { Modal, type ModalProps, type ModalSize } from "./Modal";
+export { BottomSheet, type BottomSheetProps } from "./BottomSheet";
+export { ToolTile, type ToolTileProps } from "./ToolTile";
+export { BrandMark, BRAND_MARK_ARM, BRAND_MARK_VIEWBOX, type BrandMarkProps } from "./BrandMark";
+export { ThemeDarkIcon, ThemeLightIcon, ThemeSystemIcon } from "./themeIcons";
 export { Menu, type MenuEntry, type MenuItem, type MenuProps } from "./Menu";
 export { Popover, type PopoverProps } from "./Popover";
 export { Slider, type SliderProps } from "./Slider";
@@ -24,4 +28,6 @@ export { EmptyState, type EmptyStateProps } from "./EmptyState";
 export { Dropzone, useWindowFileDrop, type DropzoneProps } from "./Dropzone";
 export { toast, type ToastKind, type ToastOptions } from "./toast";
 export { Toaster } from "./Toaster";
+export { MOBILE_QUERY, isMobileLayout, useIsMobile, useMediaQuery } from "./responsive";
+export { dismissTopLayer, useEscapeLayer } from "./layers";
 export { confirmDialog, DialogHost, promptDialog, type ConfirmOptions, type PromptOptions } from "./dialogs";

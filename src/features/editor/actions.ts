@@ -1,6 +1,6 @@
 import { useDocStore } from "@/model/docStore";
 import { addObjects, deleteObjects } from "@/model/docActions";
-import { newId, putAsset } from "@/model/registry";
+import { keepEntry, newId, putAsset, releaseOwner } from "@/model/registry";
 import type { EditorObject } from "@/model/types";
 import { platform } from "@/platform";
 import { normalizeImage } from "@/render/imageDecode";
@@ -36,15 +36,54 @@ export function placeSignature(sig: { bytes: Uint8Array; width: number; height: 
 // ------------------------------------------------------------------ clipboard
 
 let clipboard: EditorObject[] = [];
+const CLIPBOARD_OWNER = "clipboard";
+
+/** Images and fonts (registry ids) an object needs. */
+function registryIds(o: EditorObject): string[] {
+  const ids = o.kind === "text" ? [o.sourceFont, o.documentFont] : "assetId" in o ? [o.assetId] : [];
+  return ids.filter((id): id is string => !!id);
+}
+
+/**
+ * A copy that can live on any page of any document: what tied the original to its own page is
+ * dropped. An edited line no longer replaces (and removes on export) the original text under
+ * it, nor carries its links, and a magic eraser is analysed again where it lands.
+ */
+function detached(o: EditorObject): EditorObject {
+  const c = structuredClone(o) as EditorObject;
+  if (c.kind === "text" && c.replaces) {
+    c.replaces = null;
+    c.links = null;
+    // The fill only hid the original line.
+    c.background = null;
+  }
+  if (c.kind === "erase") {
+    c.method = null;
+    c.assetId = null;
+    c.renderBox = null;
+  }
+  return c;
+}
 
 export function copySelection(): number {
   const { selection } = useEditorStore.getState();
-  clipboard = useDocStore.getState().doc.objects.filter((o) => selection.includes(o.id)).map((o) => structuredClone(o));
+  const picked = useDocStore.getState().doc.objects.filter((o) => selection.includes(o.id));
+  if (picked.length === 0) return 0;
+  clipboard = picked.map(detached);
+  // The clipboard outlives its document: it keeps what the copies need until the next copy.
+  const ids = clipboard.flatMap(registryIds);
+  for (const id of ids) keepEntry(id, "clipboard-next");
+  releaseOwner(CLIPBOARD_OWNER);
+  for (const id of ids) keepEntry(id, CLIPBOARD_OWNER);
+  releaseOwner("clipboard-next");
   return clipboard.length;
 }
 
 export function cutSelection(): void {
-  if (copySelection()) deleteObjects(useEditorStore.getState().selection);
+  if (!copySelection()) return;
+  const ed = useEditorStore.getState();
+  deleteObjects(ed.selection);
+  ed.select([]);
 }
 
 export function paste(): void {
@@ -54,9 +93,11 @@ export function paste(): void {
   if (!page) return;
   const samePage = clipboard.every((o) => o.pageId === page.id);
   const copies = clipboard.map((o) => {
-    const c = structuredClone(o) as EditorObject;
+    const c = detached(o);
     c.id = newId("obj");
     c.pageId = page.id;
+    // The document pasted into now uses these too.
+    for (const id of registryIds(c)) keepEntry(id);
     if (samePage) {
       c.frame.cx += 12;
       c.frame.cy -= 12;

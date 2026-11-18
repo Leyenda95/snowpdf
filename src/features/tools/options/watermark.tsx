@@ -128,7 +128,7 @@ function WatermarkOptions({ files, options, onChange, disabled }: OptionsProps<W
             value={options.text}
             disabled={disabled}
             onChange={(e) => set({ text: e.target.value })}
-            placeholder="CONFIDENCIAL"
+            placeholder={t("CONFIDENCIAL")}
           />
           <div className="flex items-end gap-2">
             <Select<FontFamily>
@@ -211,7 +211,7 @@ function WatermarkOptions({ files, options, onChange, disabled }: OptionsProps<W
             { value: "45", label: "45°" },
             { value: "90", label: "90°" },
           ]}
-          className={disabled ? "pointer-events-none opacity-50" : undefined}
+          disabled={disabled}
         />
         <NumberField label={t("Ángulo personalizado")} suffix="°" min={-180} max={180} value={options.angle} disabled={disabled} onChange={(angle) => set({ angle })} />
       </div>
@@ -237,7 +237,7 @@ function WatermarkOptions({ files, options, onChange, disabled }: OptionsProps<W
           { value: "over", label: t("Encima del contenido") },
           { value: "under", label: t("Debajo del contenido") },
         ]}
-        className={disabled ? "pointer-events-none opacity-50" : undefined}
+        disabled={disabled}
       />
 
       <PagesField value={options.pages} files={files} disabled={disabled} onChange={(pages) => set({ pages })} />
@@ -322,7 +322,7 @@ export const watermarkTool: ToolModule<WatermarkToolOptions> = {
   cardSize: "lg",
   defaultOptions: () => ({
     tab: "text",
-    text: "CONFIDENCIAL",
+    text: t("CONFIDENCIAL"),
     font: "helvetica",
     bold: true,
     italic: false,

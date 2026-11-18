@@ -1,15 +1,15 @@
-import { useState, type ReactNode } from "react";
-import { ArrowLeft, Eye, Info, Monitor, Moon, PenLine, Save, ShieldCheck, Signature, SlidersHorizontal, Sun, Trash, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, ChevronRight, Eye, Info, Monitor, PenLine, Save, ShieldCheck, Signature, SlidersHorizontal, Trash, type LucideIcon } from "lucide-react";
 import { useAppStore, type ThemeSetting } from "@/model/appStore";
 import { cleanSuffix, usePrefs, type Prefs } from "@/model/prefs";
 import { useTabsStore } from "@/model/tabs";
-import { platform } from "@/platform";
+import { IS_ANDROID, platform } from "@/platform";
 import type { CompressLevel } from "@/pdf/mupdf/ops";
 import { useEditorStore, type ToolStyles } from "@/features/editor/editorStore";
 import { formatDate } from "@/features/editor/objects";
 import { CHECKER_STYLE } from "@/features/signature/checker";
 import { loadSavedSignatures, removeSavedSignature, type SavedSignature } from "@/features/signature/storage";
-import { Button, IconButton, NumberField, SegmentedControl, Select, Switch, TextField, cn, confirmDialog } from "@/ui";
+import { Button, IconButton, NumberField, SegmentedControl, Select, Switch, TextField, ThemeDarkIcon, ThemeLightIcon, ThemeSystemIcon, cn, confirmDialog, useEscapeLayer, useIsMobile } from "@/ui";
 import { intlLocale, t, useI18n, type LanguageSetting, type Msg } from "@/i18n";
 
 /** Open the settings screen (gear button, Ctrl+,). "Volver" returns to the current view. */
@@ -38,10 +38,17 @@ function usePref<K extends keyof Prefs>(key: K): [Prefs[K], (value: Prefs[K]) =>
 }
 
 function Group({ title, children }: { title?: string; children: ReactNode }) {
+  const mobile = useIsMobile();
   return (
-    <section className="flex flex-col gap-3">
-      {title && <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">{title}</h3>}
-      <div className="flex flex-col gap-5 rounded-xl border border-line bg-surface p-4">{children}</div>
+    <section className={cn("flex flex-col", mobile ? "gap-2" : "gap-3")}>
+      {title && (
+        <h3 className={mobile ? "px-2 text-sm font-semibold text-muted" : "text-xs font-semibold uppercase tracking-wide text-muted"}>{title}</h3>
+      )}
+      <div
+        className={cn("flex flex-col gap-5 bg-surface", mobile ? "rounded-3xl border border-line p-5" : "rounded-xl border border-line p-4")}
+      >
+        {children}
+      </div>
     </section>
   );
 }
@@ -56,9 +63,9 @@ function Note({ children }: { children: ReactNode }) {
 }
 
 const THEMES: { value: ThemeSetting; label: Msg; icon: LucideIcon }[] = [
-  { value: "system", label: "Sistema", icon: Monitor },
-  { value: "light", label: "Claro", icon: Sun },
-  { value: "dark", label: "Oscuro", icon: Moon },
+  { value: "system", label: "Sistema", icon: ThemeSystemIcon },
+  { value: "light", label: "Claro", icon: ThemeLightIcon },
+  { value: "dark", label: "Oscuro", icon: ThemeDarkIcon },
 ];
 
 function GeneralSection() {
@@ -95,23 +102,25 @@ function GeneralSection() {
           disabled={!desktop}
           onChange={setRestoreTabs}
         />
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-fg">{t("Abrir los PDF con SnowPDF")}</span>
-          <Note>
-            {desktop ? (
-              <>
-                <p>{t("Windows no deja que una app se elija sola como predeterminada. Hazlo tú en un momento:")}</p>
-                <p>
-                  {t("Abre")} <strong className="font-medium text-fg">{t("Configuración › Aplicaciones › Aplicaciones predeterminadas")}</strong>{t(", busca")}{" "}
-                  <strong className="font-medium text-fg">.pdf</strong> {t("y elige SnowPDF.")}
-                </p>
-                <p>{t("También puedes hacer clic derecho en un PDF › Abrir con › Elegir otra aplicación.")}</p>
-              </>
-            ) : (
-              <p>{t("Solo en la app de escritorio.")}</p>
-            )}
-          </Note>
-        </div>
+        {!IS_ANDROID && (
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium text-fg">{t("Abrir los PDF con SnowPDF")}</span>
+            <Note>
+              {desktop ? (
+                <>
+                  <p>{t("Windows no deja que una app se elija sola como predeterminada. Hazlo tú en un momento:")}</p>
+                  <p>
+                    {t("Abre")} <strong className="font-medium text-fg">{t("Configuración › Aplicaciones › Aplicaciones predeterminadas")}</strong>{t(", busca")}{" "}
+                    <strong className="font-medium text-fg">.pdf</strong> {t("y elige SnowPDF.")}
+                  </p>
+                  <p>{t("También puedes hacer clic derecho en un PDF › Abrir con › Elegir otra aplicación.")}</p>
+                </>
+              ) : (
+                <p>{t("Solo en la app de escritorio.")}</p>
+              )}
+            </Note>
+          </div>
+        )}
       </Group>
       <Group title={t("Arrastrar y soltar")}>
         <Select<Prefs["dropAction"]>
@@ -313,7 +322,7 @@ function PrivacySection() {
           if (!v) useAppStore.getState().clearRecent();
         }}
       />
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 max-md:flex-col max-md:items-start">
         <span className="text-sm text-muted">
           {recentCount === 0
             ? t("La lista está vacía.")
@@ -339,29 +348,93 @@ const CONTENT: Record<SectionId, () => ReactNode> = {
   privacy: PrivacySection,
 };
 
-function goBack(): void {
+/** Leaves the settings for the view they were opened from ("Volver", Android back button). */
+export function closeSettings(): void {
   const app = useAppStore.getState();
   const back = app.view.name === "settings" ? app.view.back : { name: "home" as const };
   const needsTab = back.name === "editor" || back.name === "organize";
   app.navigate(needsTab && !useTabsStore.getState().activeId ? { name: "home" } : back);
 }
 
-/** Acrobat-like "Preferencias": sections on the left, their settings on the right. */
+/** Acrobat-like "Preferencias": sections on the left, their settings on the right. On phones: list, then detail. */
 export function SettingsPage() {
-  const [section, setSection] = useState<SectionId>("general");
-  const current = SECTIONS.find((s) => s.id === section)!;
-  const Content = CONTENT[section];
+  const mobile = useIsMobile();
+  const [picked, setSection] = useState<SectionId | null>(null);
+  // Desktop always shows a section; phones start on the list.
+  const section = picked ?? (mobile ? null : "general");
+  const mainRef = useRef<HTMLElement>(null);
+  useEscapeLayer(mobile && section !== null, () => setSection(null));
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [section]);
+
+  const current = SECTIONS.find((s) => s.id === section);
+  const Content = section ? CONTENT[section] : null;
+  const backButton = (
+    <button
+      type="button"
+      onClick={closeSettings}
+      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-muted outline-none transition-colors hover:bg-surface-3 hover:text-fg focus-visible:ring-2 focus-visible:ring-brand-500/50"
+    >
+      <ArrowLeft size={14} aria-hidden /> {t("Volver")}
+    </button>
+  );
+
+  if (mobile) {
+    return (
+      <main ref={mainRef} className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-app">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-2">
+          {current && Content ? (
+            <>
+              <div className="flex items-center gap-1 pt-1">
+                <IconButton icon={ArrowLeft} label={t("Preferencias")} onClick={() => setSection(null)} />
+                <h1 className="min-w-0 flex-1 truncate text-xl font-bold tracking-tight text-fg">{t(current.label)}</h1>
+              </div>
+              <div className="flex min-w-0 flex-col gap-6">
+                <Content />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center">
+                <IconButton icon={ArrowLeft} label={t("Volver")} onClick={closeSettings} />
+              </div>
+              <h1 className="px-2 text-2xl font-bold tracking-tight text-fg">{t("Preferencias")}</h1>
+              <nav aria-label={t("Secciones")}>
+                <ul className="overflow-hidden rounded-3xl bg-surface border border-line">
+                  {SECTIONS.map((s, i) => {
+                    const Icon = s.icon;
+                    return (
+                      <li key={s.id} className="relative">
+                        {i > 0 && <span aria-hidden className="absolute inset-x-0 top-0 ml-[4.25rem] h-px bg-line" />}
+                        <button
+                          type="button"
+                          onClick={() => setSection(s.id)}
+                          className="flex h-16 w-full items-center gap-4 px-4 text-left text-base text-fg outline-none transition-colors active:bg-surface-3 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/50"
+                        >
+                          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface-3 text-fg">
+                            <Icon size={20} aria-hidden />
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">{t(s.label)}</span>
+                          <ChevronRight size={18} aria-hidden className="shrink-0 text-subtle" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </nav>
+            </>
+          )}
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <main ref={mainRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 py-4 sm:px-6">
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={goBack}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-muted outline-none transition-colors hover:bg-surface-3 hover:text-fg focus-visible:ring-2 focus-visible:ring-brand-500/50"
-          >
-            <ArrowLeft size={14} aria-hidden /> {t("Volver")}
-          </button>
+          {backButton}
           <h1 className="text-lg font-semibold tracking-tight text-fg">{t("Preferencias")}</h1>
         </div>
         <div className="flex flex-col gap-6 md:flex-row">
@@ -378,7 +451,7 @@ export function SettingsPage() {
                       onClick={() => setSection(s.id)}
                       className={cn(
                         "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-500/50",
-                        active ? "bg-brand-50 font-medium text-brand-700 dark:bg-brand-950/60 dark:text-brand-200" : "text-muted hover:bg-surface-3 hover:text-fg",
+                        active ? "bg-surface-3 font-semibold text-fg" : "text-muted hover:bg-surface-3 hover:text-fg",
                       )}
                     >
                       <Icon size={16} aria-hidden />
@@ -390,8 +463,8 @@ export function SettingsPage() {
             </ul>
           </nav>
           <div className="flex min-w-0 flex-1 flex-col gap-6 pb-10">
-            <h2 className="text-base font-semibold text-fg">{t(current.label)}</h2>
-            <Content />
+            <h2 className="text-base font-semibold text-fg">{current ? t(current.label) : ""}</h2>
+            {Content && <Content />}
           </div>
         </div>
       </div>

@@ -113,13 +113,13 @@ export function Dropzone({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       className={cn(
-        "group flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-8 text-center outline-none transition-colors",
+        "group flex flex-col items-center justify-center gap-3 rounded-2xl border-[1.5px] border-dashed px-6 py-8 text-center outline-none transition-colors",
         "focus-visible:ring-2 focus-visible:ring-brand-500/50",
         disabled
           ? "cursor-not-allowed border-line bg-surface-2 opacity-60"
           : dragging
             ? "cursor-copy border-brand-500 bg-brand-50 dark:bg-brand-500/10"
-            : "cursor-pointer border-line-strong bg-surface-2/60 hover:border-brand-400 hover:bg-brand-50/60 dark:hover:bg-brand-500/5",
+            : "cursor-pointer border-rule bg-surface hover:bg-surface-2",
         className,
       )}
     >
@@ -129,14 +129,17 @@ export function Dropzone({
             className={cn(
               "grid size-12 place-items-center rounded-2xl transition-colors",
               dragging
-                ? "bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-200"
-                : "bg-surface-3 text-muted group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-500/20 dark:group-hover:text-brand-200",
+                ? "bg-brand-500 text-ink"
+                : "bg-surface-3 text-muted group-hover:bg-brand-500 group-hover:text-ink",
             )}
           >
             <Upload size={22} aria-hidden />
           </div>
           <div className="flex flex-col gap-0.5">
-            <p className="text-sm font-medium text-fg">{t("Arrastra aquí tus archivos o haz clic para elegirlos")}</p>
+            <p className="text-sm font-medium text-fg">
+              <span className="pointer-coarse:hidden">{t("Arrastra aquí tus archivos o haz clic para elegirlos")}</span>
+              <span className="hidden pointer-coarse:inline">{t("Toca aquí para elegir tus archivos")}</span>
+            </p>
             {accept && accept.length > 0 && (
               <p className="text-xs text-subtle">{t("Admite")} {accept.map((ext) => ext.replace(/^\./, "").toUpperCase()).join(", ")}</p>
             )}
@@ -161,9 +164,9 @@ export function Dropzone({
 
 function WindowDropOverlay() {
   return (
-    <div className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center bg-brand-700/25 p-6 backdrop-blur-sm transition-opacity duration-150 starting:opacity-0 dark:bg-brand-950/60">
+    <div className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center bg-black/30 p-6 backdrop-blur-sm transition-opacity duration-150 starting:opacity-0 dark:bg-black/60">
       <div className="flex flex-col items-center gap-4 rounded-3xl border-2 border-dashed border-brand-500 bg-surface/95 px-14 py-12 text-center shadow-pop">
-        <div className="grid size-16 place-items-center rounded-2xl bg-brand-100 text-brand-600 dark:bg-brand-500/20 dark:text-brand-200">
+        <div className="grid size-16 place-items-center rounded-2xl bg-brand-500 text-ink">
           <FileUp size={32} aria-hidden />
         </div>
         <p className="text-lg font-semibold text-fg">{t("Suelta los archivos para abrirlos")}</p>

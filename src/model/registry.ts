@@ -19,19 +19,29 @@ const sources = new Map<string, SourceEntry>();
 const assets = new Map<string, ImageAsset>();
 const fonts = new Map<string, { asset: FontAsset; face: FontFace }>();
 
-/** Every source/asset belongs to the tab that was active when it was registered. */
-const owners = new Map<string, string>();
+/**
+ * Who keeps each entry alive: the tab that registered it, plus any other tab (or the clipboard)
+ * that came to use it too. It is freed when the last of them lets go.
+ */
+const owners = new Map<string, Set<string>>();
 let currentOwner = "default";
 
 export function setRegistryOwner(tabId: string): void {
   currentOwner = tabId;
 }
 
-/** Free everything a closed tab registered. Returns the released source ids. */
+/** `owner` (the active tab by default) uses the entry too: it survives until that owner is released. */
+export function keepEntry(id: string, owner = currentOwner): void {
+  const set = owners.get(id);
+  if (set) set.add(owner);
+  else owners.set(id, new Set([owner]));
+}
+
+/** Free everything only a closed tab was using. Returns the released source ids. */
 export function releaseOwner(tabId: string): string[] {
   const released: string[] = [];
-  for (const [id, owner] of owners) {
-    if (owner !== tabId) continue;
+  for (const [id, set] of owners) {
+    if (!set.delete(tabId) || set.size > 0) continue;
     owners.delete(id);
     const s = sources.get(id);
     if (s) {
@@ -53,9 +63,10 @@ export function newId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
 }
 
-export function putSource(id: string, bytes: Uint8Array, pdf: PDFDocumentProxy): void {
+/** `owner`: the tab the source is for. Loading is asynchronous, so the active tab may be another by now. */
+export function putSource(id: string, bytes: Uint8Array, pdf: PDFDocumentProxy, owner: string): void {
   sources.set(id, { bytes, pdf });
-  owners.set(id, currentOwner);
+  keepEntry(id, owner);
 }
 
 export function getSource(id: string): SourceEntry {
@@ -73,7 +84,7 @@ export function putAsset(bytes: Uint8Array, mime: ImageAsset["mime"], width: num
   const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: mime }));
   const asset: ImageAsset = { id, mime, bytes, width, height, url };
   assets.set(id, asset);
-  owners.set(id, currentOwner);
+  keepEntry(id);
   return asset;
 }
 
@@ -107,7 +118,7 @@ export async function putFont(meta: Omit<FontAsset, "id">, program: FontProgram)
   document.fonts.add(face);
   registerFontProgram(asset.id, program);
   fonts.set(asset.id, { asset, face });
-  owners.set(asset.id, currentOwner);
+  keepEntry(asset.id);
   return asset;
 }
 
@@ -129,4 +140,5 @@ export function clearRegistry(): void {
   for (const id of [...fonts.keys()]) dropFont(id);
   sources.clear();
   assets.clear();
+  owners.clear();
 }

@@ -27,8 +27,8 @@ export function Switch({ checked, onChange, label, description, disabled, classN
         <span
           aria-hidden
           className={cn(
-            "absolute inset-0 rounded-full bg-slate-400 transition-colors dark:bg-slate-600",
-            "peer-checked:bg-brand-600 dark:peer-checked:bg-brand-500",
+            "absolute inset-0 rounded-full bg-neutral-400 transition-colors dark:bg-neutral-600",
+            "peer-checked:bg-primary",
             "peer-focus-visible:ring-2 peer-focus-visible:ring-brand-500/50 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface",
           )}
         />

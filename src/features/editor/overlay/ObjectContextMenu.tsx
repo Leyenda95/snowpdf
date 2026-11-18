@@ -87,7 +87,7 @@ export function ObjectContextMenu({ x, y, ids, onClose }: { x: number; y: number
           if (document.activeElement !== e.currentTarget) e.currentTarget.focus({ preventScroll: true });
         }}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm outline-none transition-colors",
+          "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm outline-none transition-colors pointer-coarse:min-h-10",
           entry.danger ? "text-red-600 focus:bg-red-50 dark:text-red-400 dark:focus:bg-red-500/10" : "text-fg focus:bg-surface-3",
         )}
       >
@@ -95,7 +95,7 @@ export function ObjectContextMenu({ x, y, ids, onClose }: { x: number; y: number
           <Icon size={16} aria-hidden />
         </span>
         <span className="min-w-0 flex-1 truncate">{t(entry.label)}</span>
-        {entry.shortcut && <span className="ml-4 shrink-0 text-xs text-subtle">{keyLabel(entry.shortcut)}</span>}
+        {entry.shortcut && <span className="ml-4 shrink-0 text-xs text-subtle pointer-coarse:hidden">{keyLabel(entry.shortcut)}</span>}
       </button>
     );
   };

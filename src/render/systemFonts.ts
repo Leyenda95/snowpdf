@@ -1,5 +1,5 @@
 import type { Msg } from "@/i18n";
-import { getFont, putFont } from "@/model/registry";
+import { getFont, keepEntry, putFont } from "@/model/registry";
 import type { FontAsset } from "@/model/types";
 import { platform } from "@/platform";
 import { parseFontProgram } from "@/pdf/fontProgram";
@@ -110,7 +110,15 @@ const loaded = new Map<string, Promise<FontAsset>>();
 export function loadSystemFace(family: string, face: SystemFace): Promise<FontAsset> {
   const hit = loaded.get(face.path);
   if (hit) {
-    return hit.then((asset) => (getFont(asset.id) ? asset : (loaded.delete(face.path), loadSystemFace(family, face))));
+    return hit.then((asset) => {
+      if (!getFont(asset.id)) {
+        loaded.delete(face.path);
+        return loadSystemFace(family, face);
+      }
+      // Another document loaded it first: this one uses it too now.
+      keepEntry(asset.id);
+      return asset;
+    });
   }
   const pending = (async () => {
     const { bytes } = await platform.readFile(face.path);

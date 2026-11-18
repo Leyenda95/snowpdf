@@ -1,3 +1,4 @@
+import { dropTextIndex } from "@/render/pageTextIndex";
 import { create } from "zustand";
 import { useAppStore } from "./appStore";
 import { useDocStore } from "./docStore";
@@ -10,6 +11,7 @@ import { useExportPrefs } from "@/features/editor/exportPrefs";
 import { invalidateThumbnails } from "@/render/thumbnails";
 import { clearTextCache } from "@/render/textContent";
 import { confirmDialog } from "@/ui";
+import { isMobileLayout } from "@/ui/responsive";
 import { t } from "@/i18n";
 
 /**
@@ -75,6 +77,9 @@ function restore(tab: Tab): void {
       signatureDialog: false,
       scrollRequest: null,
     }));
+    // A snapshot taken in the desktop layout has its docked panels open: on a phone they would
+    // all come back at once as overlays.
+    if (isMobileLayout()) useEditorStore.getState().closePhoneOverlays();
   }
   useExportPrefs.getState().set({ flattenForms: tab.flattenForms ?? false });
   setRegistryOwner(tab.id);
@@ -86,17 +91,14 @@ function restore(tab: Tab): void {
 
 // ------------------------------------------------------------------ opening
 
-/** Reserve an id for a tab about to be loaded: sources registered from now on belong to it. */
+/** Reserve an id for a tab about to be loaded: its sources are registered under it. */
 export function beginTab(): string {
-  const id = newId("tab");
-  setRegistryOwner(id);
-  return id;
+  return newId("tab");
 }
 
-/** Loading failed or was cancelled: free what was registered and go back to the active tab. */
+/** Loading failed or was cancelled: free what was registered for the tab. */
 export function abortTab(id: string): void {
   releaseOwner(id);
-  setRegistryOwner(useTabsStore.getState().activeId ?? "default");
 }
 
 /** Show a freshly loaded document in its new tab. */
@@ -175,6 +177,7 @@ export async function closeTab(id: string): Promise<boolean> {
   for (const sourceId of releaseOwner(id)) {
     invalidateThumbnails(sourceId);
     clearTextCache(sourceId);
+    dropTextIndex(sourceId);
   }
   const index = tabs.findIndex((t) => t.id === id);
   const rest = tabs.filter((t) => t.id !== id);

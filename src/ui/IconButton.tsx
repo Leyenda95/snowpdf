@@ -24,15 +24,15 @@ export interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
 const VARIANTS: Record<IconButtonVariant, string> = {
   ghost: "text-muted hover:bg-surface-3 hover:text-fg active:bg-line",
   subtle: "bg-surface-3 text-muted hover:bg-line hover:text-fg active:bg-line-strong",
-  primary: "bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800 dark:hover:bg-brand-500",
+  primary: "bg-primary text-on-primary hover:bg-primary-hover active:bg-primary-hover",
 };
 
 const ACTIVE =
-  "bg-brand-100 text-brand-700 hover:bg-brand-200 active:bg-brand-200 dark:bg-brand-500/20 dark:text-brand-200 dark:hover:bg-brand-500/30 dark:active:bg-brand-500/30";
+  "bg-fg text-surface hover:bg-fg/90";
 
 const SIZES: Record<IconButtonSize, { box: string; icon: number }> = {
-  sm: { box: "size-7 rounded-md", icon: 16 },
-  md: { box: "size-8 rounded-lg", icon: 18 },
+  sm: { box: "size-7 rounded-md pointer-coarse:size-9", icon: 16 },
+  md: { box: "size-8 rounded-lg pointer-coarse:size-10", icon: 18 },
   lg: { box: "size-10 rounded-lg", icon: 20 },
 };
 
@@ -59,7 +59,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
         shortcut ? (
           <span className="flex items-center gap-2">
             {label}
-            <span className="rounded bg-white/20 px-1 text-[10px] font-semibold dark:bg-slate-900/10">{keyLabel(shortcut)}</span>
+            <span className="rounded bg-white/20 px-1 text-[10px] font-semibold dark:bg-neutral-900/10">{keyLabel(shortcut)}</span>
           </span>
         ) : (
           label

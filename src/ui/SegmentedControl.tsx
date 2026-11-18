@@ -1,6 +1,7 @@
 import { useRef, type KeyboardEvent } from "react";
-import type { LucideIcon } from "lucide-react";
+import { Check, type LucideIcon } from "lucide-react";
 import { cn } from "./cn";
+import { useIsMobile } from "./responsive";
 import { LABEL_CLASS } from "./fieldStyles";
 import { Tooltip } from "./Tooltip";
 
@@ -19,12 +20,13 @@ export interface SegmentedControlProps<T extends string> {
   size?: "sm" | "md";
   fullWidth?: boolean;
   label?: string;
+  disabled?: boolean;
   className?: string;
 }
 
 const SIZES = {
-  sm: { segment: "h-7 gap-1.5 px-2.5 text-xs", icon: 14 },
-  md: { segment: "h-8 gap-2 px-3 text-sm", icon: 16 },
+  sm: { segment: "h-7 gap-1.5 px-2.5 text-xs pointer-coarse:h-9", icon: 14 },
+  md: { segment: "h-8 gap-2 px-3 text-sm pointer-coarse:h-10", icon: 16 },
 } as const;
 
 export function SegmentedControl<T extends string>({
@@ -34,10 +36,15 @@ export function SegmentedControl<T extends string>({
   size = "md",
   fullWidth,
   label,
+  disabled = false,
   className,
 }: SegmentedControlProps<T>) {
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const { segment, icon: iconSize } = SIZES[size];
+  // Phones: text options that would not fit side by side become a vertical list (like Android settings).
+  const mobile = useIsMobile();
+  const textChars = options.reduce((n, o) => n + (o.label?.length ?? 0), 0);
+  const stacked = mobile && options.every((o) => o.label) && (options.length > 3 || textChars > 24);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const current = options.findIndex((o) => o.value === value);
@@ -53,16 +60,24 @@ export function SegmentedControl<T extends string>({
   };
 
   return (
-    <div className={cn("flex flex-col gap-1.5", fullWidth ? "w-full" : "w-fit", className)}>
+    <div className={cn("flex flex-col gap-1.5", fullWidth || stacked ? "w-full" : "w-fit", className)}>
       {label && <span className={LABEL_CLASS}>{label}</span>}
       <div
         role="radiogroup"
         aria-label={label}
-        onKeyDown={handleKeyDown}
-        className={cn("flex gap-0.5 rounded-lg bg-surface-3 p-0.5", fullWidth ? "w-full" : "w-fit")}
+        aria-disabled={disabled || undefined}
+        onKeyDown={disabled ? undefined : handleKeyDown}
+        className={cn(
+          stacked
+            ? "flex w-full flex-col divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface"
+            : "flex gap-0.5 rounded-lg bg-surface-3 p-0.5",
+          !stacked && (fullWidth ? "w-full" : "w-fit"),
+        )}
       >
         {options.map((option, index) => {
           const selected = option.value === value;
+          // A value outside the options (set elsewhere) must not leave the group unreachable by Tab.
+          const tabStop = selected || (index === 0 && !options.some((o) => o.value === value));
           const Icon = option.icon;
           const button = (
             <button
@@ -74,20 +89,29 @@ export function SegmentedControl<T extends string>({
               role="radio"
               aria-checked={selected}
               aria-label={option.label ? undefined : option.title}
-              tabIndex={selected ? 0 : -1}
+              tabIndex={tabStop ? 0 : -1}
+              disabled={disabled}
               onClick={() => onChange(option.value)}
               className={cn(
-                "inline-flex select-none items-center justify-center whitespace-nowrap rounded-md font-medium outline-none transition-colors",
-                "focus-visible:ring-2 focus-visible:ring-brand-500/50",
-                segment,
-                fullWidth && "flex-1",
-                selected
-                  ? "bg-surface text-fg shadow-sm dark:bg-line-strong"
-                  : "text-muted hover:text-fg",
+                stacked
+                  ? cn(
+                      "flex min-h-12 w-full select-none items-center gap-3 px-3.5 text-left text-sm outline-none transition-colors focus-visible:bg-surface-2 disabled:opacity-50",
+                      selected ? "font-medium text-fg" : "text-fg",
+                    )
+                  : cn(
+                      "inline-flex select-none items-center justify-center whitespace-nowrap rounded-md font-medium outline-none transition-colors disabled:opacity-50",
+                      "focus-visible:ring-2 focus-visible:ring-brand-500/50",
+                      segment,
+                      fullWidth && "flex-1",
+                      selected
+                        ? "bg-surface text-fg shadow-sm dark:bg-line-strong"
+                        : "text-muted hover:text-fg",
+                    ),
               )}
             >
-              {Icon && <Icon size={iconSize} aria-hidden />}
-              {option.label}
+              {Icon && <Icon size={stacked ? 18 : iconSize} aria-hidden className={stacked ? "shrink-0 text-muted" : undefined} />}
+              {stacked ? <span className="min-w-0 flex-1">{option.label}</span> : option.label}
+              {stacked && selected && <Check size={18} aria-hidden className="shrink-0 text-brand-600 dark:text-brand-300" />}
             </button>
           );
           return option.title ? (

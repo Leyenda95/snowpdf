@@ -1,4 +1,4 @@
-import { PDFBool, PDFDict, PDFName, PDFDropdown, PDFOptionList, PDFTextField } from "@cantoo/pdf-lib";
+import { PDFBool, PDFDict, PDFName, PDFDropdown, PDFOptionList, PDFTextField, type PDFDocument } from "@cantoo/pdf-lib";
 import { loadPdf, savePdf } from "@/pdf/docUtils";
 import { embedStandardFont } from "@/pdf/fonts";
 
@@ -17,9 +17,15 @@ const NO_VIEW = 1 << 5;
  */
 export async function flattenForm(bytes: Uint8Array): Promise<Uint8Array> {
   const doc = await loadPdf(bytes);
+  await flattenFormInPlace(doc);
+  return savePdf(doc);
+}
+
+/** The same on a document already loaded (the editor's export uses it too). */
+export async function flattenFormInPlace(doc: PDFDocument): Promise<void> {
   // getForm() would create an empty AcroForm in a document that has none.
   const acro = doc.context.lookup(doc.catalog.get(ACRO_FORM));
-  if (!(acro instanceof PDFDict)) return savePdf(doc);
+  if (!(acro instanceof PDFDict)) return;
 
   const form = doc.getForm();
   const fields = form.getFields();
@@ -53,5 +59,4 @@ export async function flattenForm(bytes: Uint8Array): Promise<Uint8Array> {
   }
   // An AcroForm without fields is dead weight (and makes some viewers show a "form" bar).
   if (form.getFields().length === 0) doc.catalog.delete(ACRO_FORM);
-  return savePdf(doc);
 }

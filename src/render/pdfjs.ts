@@ -1,5 +1,7 @@
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from "pdfjs-dist";
-import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import { IS_ANDROID } from "@/platform/types";
+// Our wrapper: polyfills first, then the pdf.js worker (see pdfWorker.ts).
+import workerSrc from "./pdfWorker.ts?worker&url";
 
 /** pdf.js setup for the browser. Assets are served locally from public/pdfjs (no network). */
 
@@ -11,7 +13,7 @@ const ASSETS = `${import.meta.env.BASE_URL}pdfjs/`;
 export const PDF_TO_CSS = 96 / 72;
 
 export function loadPdfjs(bytes: Uint8Array): Promise<PDFDocumentProxy> {
-  return getDocument({
+  const task = getDocument({
     // pdf.js transfers the buffer to its worker: hand it a copy so ours stays usable.
     data: bytes.slice(),
     cMapUrl: `${ASSETS}cmaps/`,
@@ -22,7 +24,14 @@ export function loadPdfjs(bytes: Uint8Array): Promise<PDFDocumentProxy> {
     enableXfa: false,
     // Keep font programs (and their names) on the main thread: "edit text" reuses them.
     fontExtraProperties: true,
-  }).promise;
+    // Android rasterises web fonts thin and greyish (light hinting, no gamma boost): small text
+    // looked washed out next to other viewers. Drawing glyphs as filled outlines gives the same
+    // solid strokes as MuPDF/PDFium. Font bytes are still kept (see above).
+    disableFontFace: IS_ANDROID,
+  });
+  // A file that fails to load would otherwise leave its worker thread running.
+  task.promise.catch(() => void task.destroy());
+  return task.promise;
 }
 
 /** Cheap check for an /Encrypt entry in the trailer(s), avoiding loading MuPDF for normal files. */

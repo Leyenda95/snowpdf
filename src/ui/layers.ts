@@ -21,6 +21,17 @@ function onKeyDown(e: KeyboardEvent): void {
   top.onEscape();
 }
 
+/**
+ * Closes the overlay opened last, as Escape would (Android back button). Returns false when
+ * no overlay is open.
+ */
+export function dismissTopLayer(): boolean {
+  const top = layers[layers.length - 1];
+  if (!top) return false;
+  top.onEscape();
+  return true;
+}
+
 export function useEscapeLayer(active: boolean, onEscape: () => void): void {
   const handler = useLatest(onEscape);
   useEffect(() => {

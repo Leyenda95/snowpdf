@@ -95,7 +95,7 @@ export function Modal({
   return createPortal(
     <div
       className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 sm:p-6",
+        "fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-3 md:p-6",
         "transition-opacity duration-150 starting:opacity-0 motion-reduce:transition-none",
       )}
       onKeyDown={(e) => {
@@ -121,13 +121,13 @@ export function Modal({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
-          "relative flex max-h-full w-full flex-col overflow-hidden rounded-2xl border border-line bg-surface text-fg shadow-pop outline-none",
+          "relative flex max-h-[calc(100dvh-24px)] w-full flex-col overflow-hidden md:max-h-full rounded-2xl border border-line bg-surface text-fg shadow-pop outline-none",
           "transition duration-150 ease-out starting:translate-y-2 starting:scale-[0.98] starting:opacity-0 motion-reduce:transition-none",
           SIZES[size],
         )}
       >
         {hasHeader ? (
-          <div className="flex shrink-0 items-start gap-4 px-6 pb-2 pt-5">
+          <div className="flex shrink-0 items-start gap-4 px-4 pb-2 pt-4 md:px-6 md:pt-5">
             <div className="min-w-0 flex-1">
               {title && (
                 <h2 id={titleId} className="text-lg font-semibold leading-snug text-fg">
@@ -154,7 +154,7 @@ export function Modal({
         )}
 
         {hasBody && (
-          <div ref={bodyRef} className={cn("min-h-0 flex-1 overflow-y-auto px-6 py-4", !hasHeader && "pt-10")}>
+          <div ref={bodyRef} className={cn("min-h-0 flex-1 overflow-y-auto px-4 py-4 md:px-6", !hasHeader && "pt-10")}>
             {children}
           </div>
         )}
@@ -164,7 +164,7 @@ export function Modal({
             ref={footerRef}
             className={cn(
               "flex shrink-0 flex-wrap items-center justify-end gap-2",
-              hasBody ? "border-t border-line bg-surface-2/60 px-6 py-3.5" : "px-6 pb-5 pt-3",
+              hasBody ? "border-t border-line bg-surface-2/60 px-4 py-3.5 md:px-6" : "px-4 pb-5 pt-3 md:px-6",
             )}
           >
             {footer}

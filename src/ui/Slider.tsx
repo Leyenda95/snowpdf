@@ -27,13 +27,13 @@ const RANGE_CLASS = cn(
   // Chromium / WebKit
   "[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-transparent",
   "[&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:size-4 [&::-webkit-slider-thumb]:appearance-none",
-  "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-solid [&::-webkit-slider-thumb]:border-brand-500",
+  "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-solid [&::-webkit-slider-thumb]:border-primary",
   "[&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:transition-shadow",
   "[&:focus-visible::-webkit-slider-thumb]:ring-4 [&:focus-visible::-webkit-slider-thumb]:ring-brand-500/30",
   "[&:active::-webkit-slider-thumb]:ring-4 [&:active::-webkit-slider-thumb]:ring-brand-500/20",
   // Firefox
   "[&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-transparent",
-  "[&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-solid [&::-moz-range-thumb]:border-brand-500",
+  "[&::-moz-range-thumb]:size-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-solid [&::-moz-range-thumb]:border-primary",
   "[&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:shadow",
 );
 
@@ -55,7 +55,7 @@ export function Slider({ value, onChange, min, max, step = 1, label, format, dis
   // Filled part of the rail, ending under the centre of the thumb.
   const fill = `calc(${THUMB / 2}px + ${ratio} * (100% - ${THUMB}px))`;
   const railStyle: CSSProperties = {
-    backgroundImage: "linear-gradient(var(--color-brand-500), var(--color-brand-500)), linear-gradient(var(--line-strong), var(--line-strong))",
+    backgroundImage: "linear-gradient(var(--primary), var(--primary)), linear-gradient(var(--line-strong), var(--line-strong))",
     backgroundSize: `${fill} 6px, 100% 6px`,
     backgroundPosition: "left center, left center",
     backgroundRepeat: "no-repeat",

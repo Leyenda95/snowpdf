@@ -79,7 +79,7 @@ export function Toaster() {
     <div
       aria-live="polite"
       aria-relevant="additions text"
-      className="pointer-events-none fixed bottom-4 right-4 z-[80] flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-2"
+      className="pointer-events-none fixed bottom-[72px] left-3 right-3 z-[80] flex flex-col gap-2 md:bottom-4 md:left-auto md:right-4 md:w-[22rem] md:max-w-[calc(100vw-2rem)]"
     >
       {toasts.map((item) => (
         <ToastCard key={item.id} item={item} />

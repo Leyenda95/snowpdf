@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The page's background in the dark theme (the app-bg token of src/styles.css). -->
+    <color name="app_background">#FF0E0E0E</color>
+</resources>

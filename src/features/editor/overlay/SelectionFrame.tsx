@@ -5,7 +5,7 @@ import type { PageGeometry } from "../viewer/geometry";
 import { endpointGesture, resizeGesture, rotateGesture, type HandleDir } from "./gestures";
 import { t } from "@/i18n";
 
-const ACCENT = "#0b7cf5";
+const ACCENT = "#ff4f1f";
 
 const HANDLE: CSSProperties = {
   position: "absolute",

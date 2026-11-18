@@ -1,16 +1,16 @@
 import type { ReactNode } from "react";
-import { Monitor, Moon, Settings, Sun, type LucideIcon } from "lucide-react";
+import { Settings, type LucideIcon } from "lucide-react";
 import { openSettings } from "@/features/settings/SettingsPage";
 import { useAppStore, type ThemeSetting } from "@/model/appStore";
-import { IconButton, Menu, type MenuEntry } from "@/ui";
+import { IconButton, Menu, ThemeDarkIcon, ThemeLightIcon, ThemeSystemIcon, cn, useIsMobile, type MenuEntry } from "@/ui";
 import { TabBar } from "./TabBar";
 import { Wordmark } from "./Wordmark";
 import { t, type Msg } from "@/i18n";
 
 const THEMES: { value: ThemeSetting; label: Msg; icon: LucideIcon }[] = [
-  { value: "system", label: "Sistema", icon: Monitor },
-  { value: "light", label: "Claro", icon: Sun },
-  { value: "dark", label: "Oscuro", icon: Moon },
+  { value: "system", label: "Sistema", icon: ThemeSystemIcon },
+  { value: "light", label: "Claro", icon: ThemeLightIcon },
+  { value: "dark", label: "Oscuro", icon: ThemeDarkIcon },
 ];
 
 function ThemeMenu() {
@@ -38,10 +38,9 @@ function Logo() {
       type="button"
       aria-label={t("SnowPDF, ir al inicio")}
       onClick={() => useAppStore.getState().navigate({ name: "home" })}
-      className="flex shrink-0 items-center gap-2.5 rounded-lg py-1 pl-1 pr-2.5 outline-none transition-colors hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-brand-500/50"
+      className="flex h-9 shrink-0 items-center rounded-lg px-2 outline-none transition-colors hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-brand-500/50"
     >
-      <img src="/snowpdf.svg" alt="" aria-hidden className="size-8 shrink-0 drop-shadow-sm" draggable={false} />
-      <Wordmark className="h-[15px]" />
+      <Wordmark className="h-4 md:h-[15px]" />
     </button>
   );
 }
@@ -51,17 +50,34 @@ export interface AppHeaderProps {
   center?: ReactNode;
   /** Actions shown before the theme menu. */
   right?: ReactNode;
+  /** Phone, inside a document: shown at the start instead of the logo (e.g. a back button). */
+  phoneLeading?: ReactNode;
+  /** Phone: the page moved Preferencias into its own overflow menu. */
+  phoneHideSettings?: boolean;
 }
 
-export function AppHeader({ center, right }: AppHeaderProps) {
+export function AppHeader({ center, right, phoneLeading, phoneHideSettings = false }: AppHeaderProps) {
+  const mobile = useIsMobile();
+  // On phones the logo gives way to the document switcher while a document is open (home lives in its sheet).
+  const inDocument = useAppStore((state) => state.view.name === "editor" || state.view.name === "organize");
+  // Phone: no "Preferencias" button while already in them.
+  const inSettings = useAppStore((state) => state.view.name === "settings");
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line bg-surface px-3">
-      <Logo />
+    <header
+      className={cn(
+        "flex h-12 max-md:[@media(max-height:480px)]:h-10 shrink-0 items-center gap-1 border-b border-rule bg-surface px-2 md:gap-3 md:px-3",
+        // Phone outside a document: an app bar that blends with the page (no window-like border).
+        !inDocument && "max-md:h-14 max-md:border-transparent max-md:bg-app max-md:px-3",
+      )}
+    >
+      {mobile && inDocument ? phoneLeading : <Logo />}
       <div className="flex min-w-0 flex-1 items-center gap-2">{center ?? <TabBar />}</div>
       <div className="flex shrink-0 items-center gap-1">
         {right}
-        <ThemeMenu />
-        <IconButton icon={Settings} label={t("Preferencias")} shortcut="Ctrl+," onClick={openSettings} />
+        <div className="hidden md:flex">
+          <ThemeMenu />
+        </div>
+        {!(mobile && (phoneHideSettings || inSettings)) && <IconButton icon={Settings} label={t("Preferencias")} shortcut="Ctrl+," onClick={openSettings} />}
       </div>
     </header>
   );

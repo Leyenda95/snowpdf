@@ -18,17 +18,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    "bg-brand-600 text-white shadow-sm hover:bg-brand-700 active:bg-brand-800 dark:hover:bg-brand-500 dark:active:bg-brand-700",
+    "bg-primary text-on-primary hover:bg-primary-hover active:bg-primary-hover",
   secondary:
-    "border border-line-strong bg-surface text-fg shadow-sm hover:bg-surface-2 active:bg-surface-3",
+    "border border-rule bg-surface text-fg hover:bg-surface-2 active:bg-surface-3",
   ghost: "text-fg hover:bg-surface-3 active:bg-line",
   subtle: "bg-surface-3 text-fg hover:bg-line active:bg-line-strong",
-  danger: "bg-red-600 text-white shadow-sm hover:bg-red-700 active:bg-red-800 dark:hover:bg-red-500 dark:active:bg-red-700",
+  danger: "bg-red-600 text-white hover:bg-red-700 active:bg-red-800 dark:hover:bg-red-500 dark:active:bg-red-700",
 };
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: "h-8 gap-1.5 rounded-lg px-3 text-[13px]",
-  md: "h-9 gap-2 rounded-lg px-4 text-sm",
+  sm: "h-8 gap-1.5 rounded-lg px-3 text-[13px] pointer-coarse:h-9",
+  md: "h-9 gap-2 rounded-lg px-4 text-sm pointer-coarse:h-10",
   lg: "h-11 gap-2.5 rounded-xl px-5 text-base",
 };
 
@@ -58,7 +58,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={cn(
-        "inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-medium outline-none transition-colors",
+        "inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap font-semibold outline-none transition-colors",
         "focus-visible:ring-2 focus-visible:ring-brand-500/50",
         "disabled:pointer-events-none disabled:opacity-50",
         VARIANTS[variant],

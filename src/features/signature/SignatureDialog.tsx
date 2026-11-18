@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Button, Checkbox, Modal, SegmentedControl, Tabs, toast } from "@/ui";
+import { Button, Checkbox, Modal, SegmentedControl, Tabs, confirmDialog, toast } from "@/ui";
 import { DrawCanvas } from "./drawCanvas";
 import { DEFAULT_INK } from "./InkPicker";
 import { ImageSignature } from "./imageSignature";
@@ -74,7 +74,10 @@ function SignatureDialogContent({ onClose, onSelect, initialKind }: Omit<Signatu
     }
   };
 
-  const removeSaved = (item: SavedSignature) => setSaved(removeSavedSignature(item.id));
+  const removeSaved = async (item: SavedSignature) => {
+    const ok = await confirmDialog({ title: t("¿Eliminar esta firma guardada?"), confirmLabel: t("Eliminar"), danger: true });
+    if (ok) setSaved(removeSavedSignature(item.id));
+  };
 
   const use = async () => {
     if (!activeSource || busy) return;
@@ -121,7 +124,7 @@ function SignatureDialogContent({ onClose, onSelect, initialKind }: Omit<Signatu
     >
       <div className="flex flex-col gap-4">
         <SegmentedControl value={kind} onChange={setKind} options={KIND_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))} label={t("Tipo")} />
-        <SavedStrip items={saved} onPick={pickSaved} onRemove={removeSaved} />
+        <SavedStrip items={saved} onPick={pickSaved} onRemove={(item) => void removeSaved(item)} />
         <Tabs value={mode} onChange={setMode} tabs={MODE_TABS.map((o) => ({ ...o, label: t(o.label) }))} />
         {/* All panels stay mounted so switching tabs never loses work. */}
         <div hidden={mode !== "dibujar"}>

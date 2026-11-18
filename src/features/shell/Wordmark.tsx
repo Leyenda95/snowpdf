@@ -1,70 +1,65 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
-import { cn } from "@/ui/cn";
+import { useLayoutEffect, useRef, useState } from "react";
+import { BRAND_MARK_ARM, cn } from "@/ui";
 
 /** Text drawn at 100 units; the viewBox is fitted to it after layout. */
 const FONT_SIZE = 100;
-/** Same-colour stroke with round joins: heavier letters with soft corners. */
-const STROKE = 7;
-/** Segoe UI cap height (the name has no descenders). */
-const CAP_HEIGHT = 0.71 * FONT_SIZE;
-const PAD = STROKE / 2 + 2;
+const FONT_FAMILY = '"Bricolage Grotesque Variable", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif';
+const FONT_WEIGHT = 800;
+/** Tight tracking, as a heavy display face wants. */
+const TRACKING = -0.04 * FONT_SIZE;
+/** Bricolage Grotesque cap height (the name has no descenders). */
+const CAP_HEIGHT = 0.66 * FONT_SIZE;
+/** Room for the round letters, which overshoot the cap height and the baseline a little. */
+const PAD = 2;
+/** The asterisk sits like a footnote sign: after the name, hanging from the cap height. */
+const MARK_SIZE = 0.42 * FONT_SIZE;
+const MARK_GAP = 0.03 * FONT_SIZE;
+/** Advance of "SnowPDF" in the display face, until the real text has been measured. */
+const DEFAULT_WIDTH = 3.93 * FONT_SIZE;
 
 export interface WordmarkProps {
-  /** Set the height (e.g. `h-16`); the width follows. */
+  /** Set the height (e.g. `h-16`): it is the cap height of the letters. The width follows. */
   className?: string;
 }
 
-/** "SnowPDF" logotype: navy "Snow", "PDF" with the gradient of the app icon. */
+/** "SnowPDF" logotype: the name in ink followed by the vermilion asterisk. */
 export function Wordmark({ className }: WordmarkProps) {
-  const gradientId = `wordmark-${useId().replace(/[^\w-]/g, "")}`;
   const textRef = useRef<SVGTextElement>(null);
-  const [width, setWidth] = useState(4.2 * FONT_SIZE);
+  const [width, setWidth] = useState(DEFAULT_WIDTH);
 
   useLayoutEffect(() => {
     let alive = true;
     const fit = () => {
-      const box = textRef.current?.getBBox();
-      if (alive && box && box.width > 0) setWidth(box.width);
+      const length = textRef.current?.getComputedTextLength();
+      if (alive && length && length > 0) setWidth(length);
     };
     fit();
-    // The system font may still be loading on first paint.
-    void document.fonts?.ready.then(fit);
+    // The display face may still be loading on first paint (the fallback is wider).
+    void document.fonts?.load(`${FONT_WEIGHT} ${FONT_SIZE}px ${FONT_FAMILY}`, "SnowPDF").then(fit, fit);
     return () => {
       alive = false;
     };
   }, []);
 
+  const markX = width + MARK_GAP;
+  // The arms are drawn around (60, 60) and reach 44 units from it: bring that box to MARK_SIZE.
+  const markScale = MARK_SIZE / 88;
+
   return (
     <svg
       role="img"
       aria-label="SnowPDF"
-      viewBox={`${-PAD} ${-CAP_HEIGHT - PAD} ${width + 2 * PAD} ${CAP_HEIGHT + 2 * PAD}`}
+      viewBox={`0 ${-CAP_HEIGHT - PAD} ${markX + MARK_SIZE} ${CAP_HEIGHT + 2 * PAD}`}
       className={cn("block w-auto overflow-visible", className)}
     >
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#4CB9FD" />
-          <stop offset="0.55" stopColor="#2397FD" />
-          <stop offset="1" stopColor="#0E7FFD" />
-        </linearGradient>
-      </defs>
-      <text
-        ref={textRef}
-        x="0"
-        y="0"
-        fontFamily='"Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif'
-        fontSize={FONT_SIZE}
-        fontWeight={700}
-        letterSpacing={STROKE}
-        strokeWidth={STROKE}
-        strokeLinejoin="round"
-        paintOrder="stroke"
-      >
-        <tspan className="fill-brand-950 stroke-brand-950 dark:fill-white dark:stroke-white">Snow</tspan>
-        <tspan dx={FONT_SIZE * 0.08} fill={`url(#${gradientId})`} stroke={`url(#${gradientId})`}>
-          PDF
-        </tspan>
+      <text ref={textRef} x="0" y="0" fontFamily={FONT_FAMILY} fontSize={FONT_SIZE} fontWeight={FONT_WEIGHT} letterSpacing={TRACKING} className="fill-fg">
+        SnowPDF
       </text>
+      <g transform={`translate(${markX} ${-CAP_HEIGHT}) scale(${markScale}) translate(-16 -16)`} className="fill-brand-500">
+        <polygon points={BRAND_MARK_ARM} />
+        <polygon points={BRAND_MARK_ARM} transform="rotate(60 60 60)" />
+        <polygon points={BRAND_MARK_ARM} transform="rotate(120 60 60)" />
+      </g>
     </svg>
   );
 }

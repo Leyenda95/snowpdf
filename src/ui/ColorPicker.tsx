@@ -1,8 +1,9 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { cn } from "./cn";
 import { LABEL_CLASS } from "./fieldStyles";
 import { Popover } from "./Popover";
+import { useIsMobile } from "./responsive";
 import { t } from "@/i18n";
 
 export interface ColorPickerProps {
@@ -68,7 +69,12 @@ function ColorPanel({
   allowNone,
 }: Required<Pick<ColorPickerProps, "value" | "onChange" | "presets">> & { allowNone: boolean }) {
   const [hex, setHex] = useState(value ?? "");
-  useEffect(() => setHex(value ?? ""), [value]);
+  // While the field is being typed in, its text is the user's: "123" is already a colour, and
+  // rewriting it as "#112233" would leave no room for the other three digits.
+  const typing = useRef(false);
+  useEffect(() => {
+    if (!typing.current) setHex(value ?? "");
+  }, [value]);
 
   return (
     <div className="flex w-56 flex-col gap-3">
@@ -107,7 +113,7 @@ function ColorPanel({
               )}
             >
               {selected && (
-                <Check size={14} strokeWidth={3} aria-hidden className={isLight(preset) ? "text-slate-900" : "text-white"} />
+                <Check size={14} strokeWidth={3} aria-hidden className={isLight(preset) ? "text-neutral-900" : "text-white"} />
               )}
             </button>
           );
@@ -140,7 +146,13 @@ function ColorPanel({
             const normalized = normalizeHex(e.target.value);
             if (normalized) onChange(normalized);
           }}
-          onBlur={() => setHex(value ?? "")}
+          onFocus={() => {
+            typing.current = true;
+          }}
+          onBlur={() => {
+            typing.current = false;
+            setHex(value ?? "");
+          }}
           className="h-8 min-w-0 flex-1 rounded-lg border border-line-strong bg-surface px-2.5 font-mono text-sm uppercase text-fg outline-none placeholder:text-subtle hover:border-subtle focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
         />
       </div>
@@ -157,15 +169,17 @@ export function ColorPicker({
   className,
 }: ColorPickerProps) {
   const labelId = useId();
+  const mobile = useIsMobile();
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
+    // Phone: "label left, swatch right" rows keep the properties sheet compact.
+    <div className={cn("flex flex-col gap-1.5 max-md:min-h-11 max-md:flex-row max-md:items-center max-md:justify-between max-md:gap-3", className)}>
       {label && (
         <span id={labelId} className={LABEL_CLASS}>
           {label}
         </span>
       )}
       <Popover
-        align="start"
+        align={mobile ? "end" : "start"}
         trigger={
           <button
             type="button"
@@ -173,7 +187,7 @@ export function ColorPicker({
             aria-label={label ? undefined : t("Elegir color")}
             aria-description={value ?? t("Sin color")}
             className={cn(
-              "inline-grid size-9 place-items-center rounded-lg border border-line-strong bg-surface outline-none transition-colors",
+              "inline-grid size-9 place-items-center rounded-lg border border-line-strong bg-surface outline-none transition-colors max-md:size-10 max-md:border-transparent max-md:bg-surface-2",
               "hover:border-subtle focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500/40",
             )}
           >

@@ -6,8 +6,9 @@ import { newId } from "@/model/registry";
 import { displayRotation, type EditorObject, type PageRef } from "@/model/types";
 import { getThumbnail } from "@/render/thumbnails";
 import { REDACT_PATTERNS, getTextRuns, searchRuns, searchRunsPattern, type TextMatch } from "@/render/textContent";
-import { Button, IconButton, Spinner, TextField, toast } from "@/ui";
+import { Button, IconButton, Spinner, TextField, cn, toast, useEscapeLayer, useIsMobile } from "@/ui";
 import { useEditorStore } from "./editorStore";
+import { PhoneBackdrop } from "./PhoneBackdrop";
 import { baseSize } from "./viewer/geometry";
 import { t } from "@/i18n";
 
@@ -61,7 +62,8 @@ export function PageThumb({ page, width, className }: { page: PageRef; width: nu
   );
 }
 
-export function ThumbnailList() {
+/** `onPick` runs after a thumbnail navigated (the phone drawer closes there). */
+export function ThumbnailList({ onPick }: { onPick?: () => void } = {}) {
   const pages = useDocStore((s) => s.doc.pages);
   const current = useEditorStore((s) => s.currentPage);
   const listRef = useRef<HTMLDivElement>(null);
@@ -77,7 +79,10 @@ export function ThumbnailList() {
           key={p.id}
           data-thumb={i}
           type="button"
-          onClick={() => useEditorStore.getState().goToPage(i)}
+          onClick={() => {
+            useEditorStore.getState().goToPage(i);
+            onPick?.();
+          }}
           className="group flex flex-col items-center gap-1.5 rounded-lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50"
         >
           <PageThumb
@@ -112,7 +117,7 @@ async function runSearch(pages: PageRef[], q: string | RegExp): Promise<PageResu
   return out;
 }
 
-function SearchPanel() {
+function SearchPanel({ onShow }: { onShow?: () => void }) {
   const pages = useDocStore((s) => s.doc.pages);
   const [query, setQuery] = useState("");
   const [pattern, setPattern] = useState<string | null>(null);
@@ -135,6 +140,7 @@ function SearchPanel() {
     const ed = useEditorStore.getState();
     ed.goToPage(r.pageIndex);
     ed.setFlash({ pageId: r.page.id, frames: m.frames, at: Date.now() });
+    onShow?.();
   };
 
   const markAll = (kind: "redact" | "highlight") => {
@@ -179,7 +185,7 @@ function SearchPanel() {
                 setPattern(p.label);
                 void search(p.regex);
               }}
-              className={`rounded-full border px-2.5 py-1 text-xs transition ${pattern === p.label ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-200" : "border-line text-muted hover:border-line-strong hover:text-fg"}`}
+              className={`rounded-full border px-2.5 py-1 text-xs transition ${pattern === p.label ? "border-brand-500 bg-surface-3 text-fg" : "border-line text-muted hover:border-line-strong hover:text-fg"}`}
             >
               {t(p.label)}
             </button>
@@ -235,16 +241,51 @@ function SearchPanel() {
   );
 }
 
+/** Phone: a search drawer that has slid away to show a result keeps its state; this pill brings it back. */
+function SearchPill({ onOpen, onClose }: { onOpen: () => void; onClose: () => void }) {
+  useEscapeLayer(true, onClose);
+  return (
+    <button
+      type="button"
+      aria-label={t("Mostrar resultados de búsqueda")}
+      onClick={onOpen}
+      className="fixed left-0 top-28 z-30 grid size-11 place-items-center rounded-r-xl border border-l-0 border-line bg-surface text-brand-600 shadow-pop dark:text-brand-300"
+    >
+      <Search size={18} aria-hidden />
+    </button>
+  );
+}
+
 export function Sidebar() {
   const panel = useEditorStore((s) => s.sidebar);
+  const mobile = useIsMobile();
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    if (!panel) setAway(false);
+  }, [panel]);
   if (!panel) return null;
+  const close = () => useEditorStore.getState().setSidebar(null);
+  const hidden = mobile && away;
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-surface">
-      <div className="flex h-10 shrink-0 items-center justify-between border-b border-line pr-1.5 pl-3">
-        <h2 className="text-sm font-medium text-fg">{t("Buscar")}</h2>
-        <IconButton size="sm" icon={X} label={t("Cerrar búsqueda")} onClick={() => useEditorStore.getState().setSidebar(null)} />
-      </div>
-      <SearchPanel />
-    </aside>
+    <>
+      {mobile && !away && <PhoneBackdrop onClose={close} />}
+      {hidden && <SearchPill onOpen={() => setAway(false)} onClose={close} />}
+      <aside
+        aria-label={t("Buscar")}
+        aria-hidden={hidden || undefined}
+        inert={hidden}
+        className={cn(
+          "flex flex-col border-r border-rule bg-surface",
+          mobile ? "fixed inset-y-0 left-0 z-40 w-[min(22rem,90vw)] shadow-pop transition-transform duration-150" : "w-60 shrink-0",
+          hidden && "-translate-x-full",
+        )}
+      >
+        <div className="flex h-10 shrink-0 items-center justify-between border-b border-line pr-1.5 pl-3">
+          <h2 className="text-sm font-medium text-fg">{t("Buscar")}</h2>
+          <IconButton size="sm" icon={X} label={t("Cerrar búsqueda")} onClick={close} />
+        </div>
+        <SearchPanel onShow={mobile ? () => setAway(true) : undefined} />
+      </aside>
+    </>
   );
 }

@@ -103,21 +103,26 @@ export function FileCard({
       style={{ width: box.width + 24, ...rootStyle }}
       {...rootProps}
       className={cn(
-        "group relative flex flex-col items-center gap-2.5 rounded-xl border border-line bg-surface p-3 shadow-sm transition-shadow",
-        draggable && !disabled && "cursor-grab touch-none hover:border-line-strong hover:shadow-md active:cursor-grabbing",
+        "group relative flex flex-col items-center gap-2.5 rounded-xl border border-line bg-surface p-3 transition-shadow max-md:rounded-3xl max-md:border-transparent",
+        draggable && !disabled && "cursor-grab touch-manipulation hover:border-line-strong md:touch-none active:cursor-grabbing",
         dragging && "z-10 opacity-40",
       )}
     >
-      <div className="flex items-center justify-center rounded-lg bg-canvas" style={{ width: box.width, height: box.height }}>
+      <div className="flex items-center justify-center rounded-lg bg-canvas max-md:rounded-2xl" style={{ width: box.width, height: box.height }}>
         <Thumb file={file} size={size} extras={extras} />
       </div>
 
       {index !== undefined && (
-        <span className="absolute left-2 top-2 grid size-6 place-items-center rounded-full bg-brand-600 text-xs font-semibold tabular-nums text-white shadow-sm">
+        <span className="absolute left-2 top-2 grid size-6 place-items-center rounded-full bg-primary text-xs font-semibold tabular-nums text-on-primary">
           {index}
         </span>
       )}
-      <div className="absolute right-1.5 top-1.5" onPointerDown={(e) => e.stopPropagation()}>
+      <div
+        className="absolute right-1.5 top-1.5"
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+      >
         <IconButton
           icon={X}
           label={t("Quitar archivo")}

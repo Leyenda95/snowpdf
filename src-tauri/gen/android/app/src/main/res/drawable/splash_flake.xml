@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Loading screen: the asterisk of the logo (three bars at 0, 60 and 120 degrees), as in index.html. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="88dp"
+    android:height="88dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+    <group
+        android:translateX="-12"
+        android:translateY="-12">
+        <path
+            android:fillColor="#FF4F1F"
+            android:pathData="M51,21.2 L60,16 L69,21.2 L69,98.8 L60,104 L51,98.8 Z" />
+        <group
+            android:pivotX="60"
+            android:pivotY="60"
+            android:rotation="60">
+            <path
+                android:fillColor="#FF4F1F"
+                android:pathData="M51,21.2 L60,16 L69,21.2 L69,98.8 L60,104 L51,98.8 Z" />
+        </group>
+        <group
+            android:pivotX="60"
+            android:pivotY="60"
+            android:rotation="120">
+            <path
+                android:fillColor="#FF4F1F"
+                android:pathData="M51,21.2 L60,16 L69,21.2 L69,98.8 L60,104 L51,98.8 Z" />
+        </group>
+    </group>
+</vector>

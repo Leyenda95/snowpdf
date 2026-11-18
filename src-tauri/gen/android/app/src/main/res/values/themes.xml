@@ -1,0 +1,7 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Theme.snowpdf" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- What shows before anything is drawn (and behind the system's launch screen): the page's colour, not white. -->
+        <item name="android:windowBackground">@color/app_background</item>
+    </style>
+</resources>

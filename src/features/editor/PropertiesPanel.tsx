@@ -6,12 +6,15 @@ import {
   ArrowUpToLine,
   Copy,
   Italic,
+  Maximize2,
+  MoveHorizontal,
   RotateCcw,
   RotateCw,
   TextAlignCenter,
   TextAlignEnd,
   TextAlignStart,
   Trash,
+  X,
 } from "lucide-react";
 import { useDocStore } from "@/model/docStore";
 import { deleteObjects, deletePages, duplicateObjects, reorderObjects, rotatePages, updateObject } from "@/model/docActions";
@@ -19,12 +22,13 @@ import { getFont } from "@/model/registry";
 import { displayRotation, pageBox, type EditorObject, type FontFamily, type SymbolName, type TextObject } from "@/model/types";
 import { SYMBOL_LABELS } from "@/pdf/symbols";
 import { WEIGHT_LABELS, closestFace, listSystemFamilies, loadSystemFace, type SystemFamily } from "@/render/systemFonts";
-import { Button, ColorPicker, IconButton, NumberField, SegmentedControl, Select, Slider, Switch, toast } from "@/ui";
+import { Button, ColorPicker, IconButton, NumberField, SegmentedControl, Select, Slider, Switch, toast, useIsMobile } from "@/ui";
 import { rememberTextFont, useEditorStore, type EditorTool } from "./editorStore";
 import { objectLabel } from "./overlay/ObjectView";
 import { refitText } from "./objects";
 import { missingGlyphs } from "@/pdf/textLayout";
 import { useExportPrefs } from "./exportPrefs";
+import { PhoneBackdrop } from "./PhoneBackdrop";
 import { ThumbnailList } from "./Sidebar";
 import { t, type Msg } from "@/i18n";
 
@@ -43,6 +47,16 @@ const HIGHLIGHT_PRESETS = ["#facc15", "#4ade80", "#22d3ee", "#f472b6", "#fb923c"
 const pct = (v: number) => `${Math.round(v * 100)} %`;
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
+  const mobile = useIsMobile();
+  if (mobile) {
+    // Phone: soft sheet, sentence-case titles, no dividers.
+    return (
+      <section className="space-y-2 px-4 py-3">
+        <h3 className="text-base font-semibold text-fg">{title}</h3>
+        {children}
+      </section>
+    );
+  }
   return (
     <section className="space-y-3 border-b border-line px-4 py-4 last:border-b-0">
       <h3 className="text-[11px] font-semibold tracking-wide text-subtle uppercase">{title}</h3>
@@ -476,37 +490,114 @@ function PageProps() {
   );
 }
 
+/** What the properties area shows: the selected object, a multi-selection, or the tool/page defaults. */
+function propertiesBody(selected: EditorObject[], selection: string[], tool: EditorTool): ReactNode {
+  if (selected.length === 1) return <ObjectProps obj={selected[0]} />;
+  if (selected.length > 1) {
+    return (
+      <Section title={t("{n} objetos seleccionados", { n: selected.length })}>
+        <div className="flex gap-2">
+          <Button size="sm" icon={Copy} onClick={() => useEditorStore.getState().select(duplicateObjects(selection))}>
+            {t("Duplicar")}
+          </Button>
+          <Button size="sm" variant="danger" icon={Trash} onClick={() => deleteObjects(selection)}>
+            {t("Eliminar")}
+          </Button>
+        </div>
+      </Section>
+    );
+  }
+  return (
+    <>
+      <ToolDefaults tool={tool} />
+      <PageProps />
+    </>
+  );
+}
+
+/** Phone: the page list as its own left drawer (opened from the floating page pill). */
+function PagesDrawer() {
+  const close = () => useEditorStore.getState().setThumbnails(false);
+  const current = useEditorStore((s) => s.currentPage);
+  const pageCount = useDocStore((s) => s.doc.pages.length);
+  const fit = (mode: "width" | "page") => {
+    const ed = useEditorStore.getState();
+    ed.setZoom(ed.zoom, mode);
+    close();
+  };
+  return (
+    <>
+      <PhoneBackdrop onClose={close} />
+      <aside aria-label={t("Páginas")} className="fixed inset-y-0 left-0 z-40 flex w-[min(22rem,90vw)] flex-col border-r border-line bg-surface shadow-pop">
+        <div className="flex h-11 shrink-0 items-center justify-between border-b border-line pl-4 pr-2">
+          <h2 className="text-sm font-semibold text-fg">{t("Páginas")}</h2>
+          <IconButton icon={X} size="sm" label={t("Cerrar páginas")} onClick={close} />
+        </div>
+        <div className="shrink-0 space-y-2.5 border-b border-line p-3">
+          <div className="flex items-end gap-2 text-sm text-muted">
+            <NumberField
+              label={t("Ir a la página")}
+              value={current + 1}
+              min={1}
+              max={pageCount}
+              onChange={(n) => useEditorStore.getState().goToPage(Math.min(pageCount, Math.max(1, Math.round(n))) - 1)}
+              className="w-28"
+              inputClassName="h-10"
+            />
+            <span className="pb-2.5">/ {pageCount}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Button size="sm" icon={MoveHorizontal} onClick={() => fit("width")}>
+              {t("Ajustar al ancho")}
+            </Button>
+            <Button size="sm" icon={Maximize2} onClick={() => fit("page")}>
+              {t("Página completa")}
+            </Button>
+          </div>
+        </div>
+        <ThumbnailList onPick={close} />
+      </aside>
+    </>
+  );
+}
+
 export function PropertiesPanel() {
+  const mobile = useIsMobile();
   const show = useEditorStore((s) => s.showProps);
   const tool = useEditorStore((s) => s.tool);
   const selection = useEditorStore((s) => s.selection);
   const objects = useDocStore((s) => s.doc.objects);
   const thumbnails = useEditorStore((s) => s.thumbnails);
-  if (!show) return null;
   const selected = objects.filter((o) => selection.includes(o.id));
-  return (
-    <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-line bg-surface">
-      {/* Properties scroll on their own; the page list below keeps at least ~40 % of the height. */}
-      <div className={`min-h-0 overflow-y-auto ${thumbnails ? "max-h-[60%] shrink-0" : "flex-1"}`}>
-        {selected.length === 1 ? (
-          <ObjectProps obj={selected[0]} />
-        ) : selected.length > 1 ? (
-          <Section title={t("{n} objetos seleccionados", { n: selected.length })}>
-            <div className="flex gap-2">
-              <Button size="sm" icon={Copy} onClick={() => useEditorStore.getState().select(duplicateObjects(selection))}>
-                {t("Duplicar")}
-              </Button>
-              <Button size="sm" variant="danger" icon={Trash} onClick={() => deleteObjects(selection)}>
-                {t("Eliminar")}
-              </Button>
-            </div>
-          </Section>
-        ) : (
+  if (mobile) {
+    const close = () => useEditorStore.getState().toggleProps();
+    return (
+      <>
+        {show && (
           <>
-            <ToolDefaults tool={tool} />
-            <PageProps />
+            <PhoneBackdrop onClose={close} />
+            <aside
+              aria-label={t("Propiedades")}
+              className="fixed inset-x-0 bottom-0 z-40 flex max-h-[60dvh] flex-col overflow-hidden rounded-t-2xl bg-surface shadow-pop"
+            >
+              <div className="flex h-12 shrink-0 items-center justify-between pl-4 pr-2">
+                <h2 className="text-base font-semibold text-fg">{t("Propiedades")}</h2>
+                <IconButton icon={X} size="md" label={t("Cerrar propiedades")} onClick={close} />
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{propertiesBody(selected, selection, tool)}</div>
+            </aside>
           </>
         )}
+        {thumbnails && <PagesDrawer />}
+      </>
+    );
+  }
+  if (!show) return null;
+  return (
+    <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-l border-rule bg-surface">
+      {/* Properties scroll on their own; the page list below keeps at least ~40 % of the height. */}
+      <div className={`min-h-0 overflow-y-auto ${thumbnails ? "max-h-[60%] shrink-0" : "flex-1"}`}>
+        {propertiesBody(selected, selection, tool)}
       </div>
       {thumbnails && (
         <div className="flex min-h-48 flex-1 flex-col border-t border-line">

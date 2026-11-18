@@ -4,24 +4,94 @@
 /* Dark mode follows the `.dark` class on <html> (set from the theme setting). */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/*
+ * Phone layout = narrow screens, plus touch screens held in landscape (a phone on its side is
+ * wider than 768 px but far too short for the desktop layout). Keep in sync with MOBILE_QUERY:
+ * `max-md` is that query and `md` its exact opposite ("not coarse" spelled as fine or none), so
+ * every viewport gets exactly one of the two.
+ */
+@custom-variant md (@media (min-width: 48rem) and ((pointer: fine) or (pointer: none) or (min-height: 30rem)));
+@custom-variant max-md (@media (max-width: 47.99rem) or ((pointer: coarse) and (max-height: 29.99rem)));
+
+/*
+ * The interface fonts ship with the app (nothing is fetched at runtime): Instrument Sans for text,
+ * Bricolage Grotesque for headings and the logotype. Both are variable fonts under the SIL Open
+ * Font License (see src/assets/fonts). The family names carry "Variable" so they can never be
+ * mistaken for a font of the document being edited.
+ */
+@font-face {
+  font-family: "Instrument Sans Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 700;
+  src: url("./assets/fonts/instrument-sans-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Instrument Sans Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400 700;
+  src: url("./assets/fonts/instrument-sans-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Bricolage Grotesque Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("./assets/fonts/bricolage-grotesque-latin-ext-opsz-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Bricolage Grotesque Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 200 800;
+  src: url("./assets/fonts/bricolage-grotesque-latin-opsz-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @theme {
-  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Instrument Sans Variable", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  /* Headings and the logotype. */
+  --font-display: "Bricolage Grotesque Variable", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
 
-  /* Brand: icy blue */
-  --color-brand-50: #f0f7ff;
-  --color-brand-100: #e0efff;
-  --color-brand-200: #b9dcff;
-  --color-brand-300: #7cc0ff;
-  --color-brand-400: #369dff;
-  --color-brand-500: #0b7cf5;
-  --color-brand-600: #005fd1;
-  --color-brand-700: #004ba9;
-  --color-brand-800: #04408b;
-  --color-brand-900: #0a3873;
-  --color-brand-950: #07234a;
+  /*
+   * Brand: vermilion, the single accent. 500 is the accent fill (content on it is `text-ink`,
+   * never white); 600 and darker are for accent text on light surfaces, 300/400 on dark ones.
+   */
+  --color-brand-50: #fff4ef;
+  --color-brand-100: #ffe5da;
+  --color-brand-200: #ffc9b3;
+  --color-brand-300: #ff9f7c;
+  --color-brand-400: #ff7446;
+  --color-brand-500: #ff4f1f;
+  --color-brand-600: #c4390b;
+  --color-brand-700: #a12e08;
+  --color-brand-800: #822608;
+  --color-brand-900: #68200a;
+  --color-brand-950: #3a1004;
 
-  --shadow-pop: 0 10px 30px -10px rgb(15 23 42 / 0.25), 0 4px 10px -4px rgb(15 23 42 / 0.12);
+  /* The ink of the logotype: also what goes on top of a vermilion fill, in both themes. */
+  --color-ink: #121212;
+
+  /* Nearly square corners. */
+  --radius-xs: 0.0625rem;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.625rem;
+  --radius-3xl: 0.75rem;
+  --radius-4xl: 1rem;
+
+  --shadow-pop: 0 10px 30px -10px rgb(0 0 0 / 0.25), 0 4px 10px -4px rgb(0 0 0 / 0.12);
 }
 
 /* Semantic tokens: use these (bg-app, bg-surface, text-fg, border-line...) instead of raw greys
@@ -37,34 +107,57 @@
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-canvas: var(--canvas-bg);
+  /* Filled main action (bg-primary text-on-primary hover:bg-primary-hover): ink on light, vermilion on dark. */
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+  /* Structural line of the frame (header, side panels): ink on light, a grey on dark. */
+  --color-rule: var(--rule);
 }
 
 :root {
-  --app-bg: #f3f5f9;
+  --app-bg: #f4f4f2;
   --surface: #ffffff;
-  --surface-2: #f6f8fb;
-  --surface-3: #eceff5;
-  --fg: #0f172a;
-  --fg-muted: #475569;
-  --fg-subtle: #94a3b8;
-  --line: #e2e8f0;
-  --line-strong: #cbd5e1;
-  --canvas-bg: #e6e9ef;
+  --surface-2: #f7f7f5;
+  --surface-3: #ecece9;
+  --fg: #121212;
+  --fg-muted: #55554f;
+  --fg-subtle: #6e6e68;
+  --line: #e2e2df;
+  --line-strong: #c9c9c5;
+  --canvas-bg: #e9e9e6;
+  --primary: #121212;
+  --primary-hover: #33332f;
+  --on-primary: #ffffff;
+  --rule: #121212;
   color-scheme: light;
 }
 
 .dark {
-  --app-bg: #0b1120;
-  --surface: #121a2b;
-  --surface-2: #172135;
-  --surface-3: #1e2a41;
-  --fg: #e2e8f0;
-  --fg-muted: #a3b1c6;
-  --fg-subtle: #64748b;
-  --line: #243049;
-  --line-strong: #33415e;
-  --canvas-bg: #0e1626;
+  --app-bg: #0e0e0e;
+  --surface: #171717;
+  --surface-2: #1e1e1e;
+  --surface-3: #262626;
+  --fg: #f2f2f0;
+  --fg-muted: #a8a8a3;
+  --fg-subtle: #8a8a85;
+  --line: #2a2a2a;
+  --line-strong: #3a3a3a;
+  --canvas-bg: #0a0a0a;
+  --primary: #ff4f1f;
+  --primary-hover: #ff6a3d;
+  --on-primary: #121212;
+  --rule: #3a3a3a;
   color-scheme: dark;
+}
+
+/* Headings speak with the display face; utilities still set their size and weight. */
+@layer base {
+  h1,
+  h2 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
 }
 
 html,
@@ -80,6 +173,16 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* Horizontally scrollable strips (phone toolbar) without a visible scrollbar. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Thin, unobtrusive scrollbars */
@@ -108,6 +211,19 @@ body {
   transform-origin: 0 0;
 }
 
+/* Phone: sharp canvas for the visible part of the page, positioned in JS over the base canvas. */
+/* Viewer zoom animations: only the page bitmaps move (see ZOOMING_CLASS in Viewer.tsx). */
+.snow-zooming .textLayer,
+.snow-zooming .annotationLayer {
+  visibility: hidden;
+}
+
+.snow-page canvas.snow-page-detail {
+  position: absolute;
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+
 /* The text layer only matters for selection / text tools */
 .snow-page .textLayer {
   z-index: 1;
@@ -123,6 +239,14 @@ body {
 }
 .snow-page .snow-overlay > * {
   pointer-events: auto;
+}
+
+/* Phone: text is selected with exact glyph boxes (touchSelection), not by the browser. */
+.snow-touch-select .textLayer,
+.snow-touch-select .textLayer * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Tools decide which pdf.js layer may receive the pointer. */

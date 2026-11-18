@@ -80,7 +80,7 @@ export function SaveDialog({ open, onClose, hasForm }: { open: boolean; onClose:
           <Switch label={t("Proteger con contraseña")} description={t("Cifrado AES de 256 bits.")} checked={protect} onChange={setProtect} />
           {protect && (
             <div className="space-y-3 rounded-xl border border-line bg-surface-2 p-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <TextField label={t("Contraseña para abrir")} type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
                 <TextField label={t("Repetir")} type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} error={pw && pw !== pw2 ? t("No coincide") : undefined} />
               </div>

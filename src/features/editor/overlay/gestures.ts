@@ -8,11 +8,15 @@ import { cssRotation } from "@/render/viewTransform";
 import { frameFromScreenSegment, rotateScreen, segmentEnds } from "../objects";
 import type { PageGeometry } from "../viewer/geometry";
 
-/** Pointer-captured drag. Deltas are in overlay px (no CSS scaling is applied to overlays). */
+/**
+ * Pointer-captured drag. Deltas are in overlay px (no CSS scaling is applied to overlays).
+ * `onEnd` gets `interrupted` when a second finger cut the drag short (it became a pinch):
+ * whatever was being drawn was not meant.
+ */
 export function drag(
   e: ReactPointerEvent,
   onMove: (dx: number, dy: number, ev: PointerEvent) => void,
-  onEnd?: (moved: boolean, ev: PointerEvent) => void,
+  onEnd?: (moved: boolean, ev: PointerEvent, interrupted: boolean) => void,
   threshold = 3,
 ): void {
   e.preventDefault();
@@ -22,20 +26,34 @@ export function drag(
   const sx = e.clientX;
   const sy = e.clientY;
   let moved = false;
+  let last: PointerEvent | null = null;
   const move = (ev: PointerEvent) => {
+    last = ev;
     const dx = ev.clientX - sx;
     const dy = ev.clientY - sy;
     if (!moved && Math.hypot(dx, dy) < threshold) return;
     moved = true;
     onMove(dx, dy, ev);
   };
-  const up = (ev: PointerEvent) => {
+  const finish = (ev: PointerEvent, interrupted = false) => {
     target.removeEventListener("pointermove", move);
     target.removeEventListener("pointerup", up);
     target.removeEventListener("pointercancel", up);
-    onEnd?.(moved, ev);
+    document.removeEventListener("pointerdown", secondFinger, true);
+    try {
+      target.releasePointerCapture(e.pointerId);
+    } catch {
+      // Already released.
+    }
+    onEnd?.(moved, ev, interrupted);
     breakCoalescing();
   };
+  const up = (ev: PointerEvent) => finish(ev);
+  // A second finger turns a touch drag into a pinch: end the stroke/move right here.
+  const secondFinger = (ev: PointerEvent) => {
+    if (ev.pointerType === "touch" && ev.pointerId !== e.pointerId) finish(last ?? ev, true);
+  };
+  if (e.pointerType === "touch") document.addEventListener("pointerdown", secondFinger, true);
   target.addEventListener("pointermove", move);
   target.addEventListener("pointerup", up);
   target.addEventListener("pointercancel", up);

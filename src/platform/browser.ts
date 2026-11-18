@@ -1,15 +1,17 @@
-import { zipSync } from "fflate";
 import { EXTENSIONS, SAVE_FILTERS, type OutputFile, type PickedFile, type Platform } from "./types";
+import { zipFiles } from "./zip";
 import { t } from "@/i18n";
 
 /** Browser fallback (development and future PWA): everything stays in the tab's memory. */
 
-function pickWithInput(accept: string, multiple: boolean): Promise<File[]> {
+/** `capture`: ask for the camera instead of a file (honoured on phones; elsewhere it is a normal picker). */
+export function pickWithInput(accept: string, multiple: boolean, capture = false): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = accept;
     input.multiple = multiple;
+    if (capture) input.setAttribute("capture", "environment");
     input.style.display = "none";
     let settled = false;
     const finish = (files: File[]) => {
@@ -51,6 +53,12 @@ export const browserPlatform: Platform = {
     return filesToPicked(await pickWithInput(accept, multiple));
   },
 
+  async capturePhoto() {
+    // Exactly "image/*": Android's WebView only opens the camera for that accept value.
+    const [photo] = await filesToPicked(await pickWithInput("image/*", false, true));
+    return photo ?? null;
+  },
+
   async saveFile(bytes, { suggestedName, kind }) {
     download(bytes, suggestedName, SAVE_FILTERS[kind].mime);
     return suggestedName;
@@ -65,13 +73,7 @@ export const browserPlatform: Platform = {
       download(files[0].bytes, files[0].name, "application/octet-stream");
       return files[0].name;
     }
-    const entries: Record<string, Uint8Array> = {};
-    for (const f of files) {
-      let name = f.name;
-      for (let i = 1; name in entries; i++) name = f.name.replace(/(\.[^.]+)?$/, ` (${i})$1`);
-      entries[name] = f.bytes;
-    }
-    download(zipSync(entries, { level: 0 }), zipName, SAVE_FILTERS.zip.mime);
+    download(zipFiles(files), zipName, SAVE_FILTERS.zip.mime);
     return zipName;
   },
 
@@ -81,6 +83,10 @@ export const browserPlatform: Platform = {
 
   async takeStartupFiles() {
     return [];
+  },
+
+  onIncomingFiles() {
+    return () => undefined;
   },
 
   async openExternalUrl(url) {

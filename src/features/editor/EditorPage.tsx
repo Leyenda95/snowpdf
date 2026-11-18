@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import { ChevronDown, Files, LayoutGrid, PanelRight, Save, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ChevronDown, EllipsisVertical, Files, LayoutGrid, PanelRight, Save, Settings, X } from "lucide-react";
+import { openSettings } from "@/features/settings/SettingsPage";
 import { useAppStore } from "@/model/appStore";
 import { useDocStore } from "@/model/docStore";
 import { deleteObjects, duplicateObjects, updateObjects } from "@/model/docActions";
@@ -10,7 +11,7 @@ import { platform } from "@/platform";
 import { openDocuments } from "@/model/workspace";
 import { AppHeader } from "@/features/shell/AppHeader";
 import { SignatureDialog } from "@/features/signature/SignatureDialog";
-import { Button, IconButton, Menu, NumberField, confirmDialog, toast, useWindowFileDrop } from "@/ui";
+import { Button, IconButton, Menu, NumberField, cn, confirmDialog, toast, useEscapeLayer, useIsMobile, useMediaQuery, useWindowFileDrop } from "@/ui";
 import { handleDroppedFiles } from "./askDropAction";
 import { useEditorStore } from "./editorStore";
 import { EditorToolbar, TOOL_SHORTCUTS, activateTool } from "./EditorToolbar";
@@ -18,7 +19,9 @@ import { Sidebar } from "./Sidebar";
 import { ToolsPanel } from "./tools/ToolsPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { SaveDialog } from "./SaveDialog";
-import { Viewer, zoomViewerTo } from "./viewer/Viewer";
+import { SHORT_QUERY, Viewer, phoneInsets, zoomViewerTo } from "./viewer/Viewer";
+import { PhoneViewerOverlays } from "./PhoneOverlays";
+import { clearTouchSelection } from "./touchSelection";
 import { PageOverlay } from "./overlay/PageOverlay";
 import { Underlay } from "./overlay/Underlay";
 import { copySelection, cutSelection, paste, placeSignature } from "./actions";
@@ -71,6 +74,16 @@ export function EditorPage() {
   const thumbnails = useEditorStore((s) => s.thumbnails);
   const showProps = useEditorStore((s) => s.showProps);
   const signatureOpen = useEditorStore((s) => s.signatureDialog);
+  const sidebar = useEditorStore((s) => s.sidebar);
+  const toolsPanel = useEditorStore((s) => s.toolsPanel);
+  const hasSelection = useEditorStore((s) => s.selection.length > 0);
+  const activeTab = useTabsStore((s) => s.activeId);
+  const mobile = useIsMobile();
+  const short = useMediaQuery(SHORT_QUERY);
+  // The root font size is fixed for the session (set once in index.html).
+  const insetsTall = useMemo(() => phoneInsets(false), []);
+  const insetsShort = useMemo(() => phoneInsets(true), []);
+  const immersive = useEditorStore((s) => s.immersive) && mobile;
   const [saveAsOpen, setSaveAsOpen] = useState(false);
 
   const save = useCallback(() => saveWorkspace(quickSaveOptions()), []);
@@ -83,6 +96,20 @@ export function EditorPage() {
     });
   }, ["pdf", "png", "jpg", "jpeg", "webp", "gif", "bmp"]);
 
+  // The selection only ever names objects that exist: undoing a creation or deleting from a
+  // panel would otherwise leave a ghost that swallows the arrow keys and the next tap.
+  useEffect(
+    () =>
+      useDocStore.subscribe((s, prev) => {
+        if (s.doc.objects === prev.doc.objects) return;
+        const ed = useEditorStore.getState();
+        if (ed.selection.length === 0) return;
+        const alive = new Set(s.doc.objects.map((o) => o.id));
+        if (ed.selection.some((id) => !alive.has(id))) ed.select(ed.selection.filter((id) => alive.has(id)));
+      }),
+    [],
+  );
+
   // Keyboard shortcuts.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -93,8 +120,11 @@ export function EditorPage() {
       const key = e.key.toLowerCase();
       if (isTyping(e)) {
         // Undo/redo in a property field (size, colour...) undoes the document, not the field.
-        if (!(mod && (key === "z" || key === "y")) || isFreeText(e)) return;
-        (e.target as HTMLElement).blur();
+        const undo = mod && (key === "z" || key === "y") && !isFreeText(e);
+        // Saving works from anywhere: what is being typed is already in the document.
+        const saving = mod && key === "s";
+        if (!undo && !saving) return;
+        if (undo) (e.target as HTMLElement).blur();
       }
       const page = doc.doc.pages[ed.currentPage];
 
@@ -109,6 +139,8 @@ export function EditorPage() {
               doc.redo();
               return true;
             case "s":
+              // A held key repeats: one save is enough.
+              if (e.repeat) return true;
               if (e.shiftKey) setSaveAsOpen(true);
               else void save();
               return true;
@@ -230,24 +262,76 @@ export function EditorPage() {
     }
   }, []);
 
+  // Immersive reading mode (phone): any interaction that needs the chrome brings it back.
+  const exitImmersive = useCallback(() => useEditorStore.getState().setImmersive(false), []);
+  useEscapeLayer(immersive, exitImmersive);
+  const leaves = (tool !== "select" && tool !== "hand") || !!placing || hasSelection || thumbnails || showProps || toolsPanel || !!sidebar;
+  useEffect(() => {
+    if (leaves || !mobile) exitImmersive();
+  }, [leaves, mobile, exitImmersive]);
+  useEffect(() => {
+    exitImmersive();
+  }, [activeTab, exitImmersive]);
+
+  // Phone text selection ends with a tool change, a drawer/sheet or another document.
+  useEffect(() => {
+    clearTouchSelection();
+  }, [tool, placing, sidebar, toolsPanel, thumbnails, showProps, activeTab]);
+
   const textInteractive = (tool === "select" || tool === "highlight") && !placing;
   const formsInteractive = tool === "select" && !placing;
 
-  return (
-    <div className="flex h-full flex-col">
+  const phoneHeader = (
+    <AppHeader
+      phoneHideSettings
+      phoneLeading={<IconButton icon={ArrowLeft} label={t("Inicio")} onClick={() => useAppStore.getState().navigate({ name: "home" })} />}
+      right={
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label={t("Guardar")}
+            onClick={() => void save()}
+            className="grid size-10 place-items-center rounded-full bg-primary text-on-primary outline-none transition-colors hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-brand-500/50 active:bg-primary-hover"
+          >
+            <Save size={20} />
+          </button>
+          <Menu
+            align="end"
+            trigger={<IconButton icon={EllipsisVertical} label={t("Más opciones")} />}
+            items={[
+              { id: "organize", label: t("Organizar páginas"), icon: LayoutGrid, onSelect: () => useAppStore.getState().navigate({ name: "organize" }) },
+              { id: "saveas", label: t("Guardar como…"), icon: Save, onSelect: () => setSaveAsOpen(true) },
+              { id: "settings", label: t("Preferencias"), icon: Settings, onSelect: openSettings },
+              { type: "separator" },
+              { id: "close", label: t("Cerrar documento"), icon: X, onSelect: () => void leaveEditor() },
+            ]}
+          />
+        </div>
+      }
+    />
+  );
+
+  const header = mobile ? phoneHeader : (
       <AppHeader
         right={
-          <div className="flex items-center gap-1.5">
-            <Button size="sm" variant="ghost" icon={LayoutGrid} onClick={() => useAppStore.getState().navigate({ name: "organize" })}>
-              {t("Organizar")}
+          <div className="flex items-center gap-1.5 max-md:gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={LayoutGrid}
+              aria-label={t("Organizar")}
+              onClick={() => useAppStore.getState().navigate({ name: "organize" })}
+              className="max-md:size-9 max-md:px-0"
+            >
+              <span className="max-md:hidden">{t("Organizar")}</span>
             </Button>
             <div className="flex">
-              <Button size="sm" variant="primary" icon={Save} onClick={() => void save()} className="rounded-r-none">
-                {t("Guardar")}
+              <Button size="sm" variant="primary" icon={Save} aria-label={t("Guardar")} onClick={() => void save()} className="rounded-r-none max-md:size-9 max-md:px-0">
+                <span className="max-md:hidden">{t("Guardar")}</span>
               </Button>
               <Menu
                 align="end"
-                trigger={<Button size="sm" variant="primary" icon={ChevronDown} aria-label={t("Más opciones de guardado")} className="rounded-l-none border-l border-white/25 px-1.5" />}
+                trigger={<Button size="sm" variant="primary" icon={ChevronDown} aria-label={t("Más opciones de guardado")} className="rounded-l-none border-l border-white/25 px-1.5 max-md:h-9 max-md:w-8 max-md:justify-center max-md:px-0" />}
                 items={[
                   { id: "saveas", label: t("Guardar como…"), shortcut: "Ctrl+Mayús+S", onSelect: () => setSaveAsOpen(true) },
                   { type: "separator" },
@@ -258,51 +342,79 @@ export function EditorPage() {
           </div>
         }
       />
-      <EditorToolbar />
+  );
+
+  return (
+    <div className={cn("flex h-full flex-col", mobile && "relative")}>
+      {mobile ? (
+        <div
+          inert={immersive}
+          className={cn(
+            "absolute inset-x-0 top-0 z-20 transition-transform duration-200 motion-reduce:transition-none",
+            immersive && "-translate-y-full",
+          )}
+        >
+          {header}
+        </div>
+      ) : (
+        header
+      )}
+      {!mobile && <EditorToolbar />}
       <div className="flex min-h-0 flex-1">
         <ToolsPanel />
         <Sidebar />
         <div className="relative flex min-w-0 flex-1 flex-col" onPointerDown={onViewerPointerDown}>
           <Viewer
             className="min-h-0 flex-1"
+            insets={mobile ? (short ? insetsShort : insetsTall) : undefined}
+            onTap={mobile ? () => useEditorStore.getState().setImmersive(!useEditorStore.getState().immersive) : undefined}
             textInteractive={textInteractive}
             formsInteractive={formsInteractive}
             onOpenExternal={(u) => void openExternal(u)}
             overlay={(page, index, geom) => <PageOverlay page={page} index={index} geom={geom} />}
             underlay={(page, geom) => <Underlay page={page} geom={geom} />}
           />
-          <div className="flex h-9 shrink-0 items-center gap-2 border-t border-line bg-surface px-2 text-xs text-muted">
-            <span>{t("Página")}</span>
-            <NumberField
-              value={current + 1}
-              min={1}
-              max={pageCount}
-              onChange={(n) => useEditorStore.getState().goToPage(Math.min(pageCount, Math.max(1, Math.round(n))) - 1)}
-              className="w-16"
-              inputClassName="h-7 text-xs"
-            />
-            <span>{t("de {total}", { total: pageCount })}</span>
-            {placing && <span className="ml-3 text-brand-600 dark:text-brand-300">{t("Haz clic en la página para colocar · Esc para cancelar")}</span>}
-            <span className="ml-auto" />
-            <IconButton
-              size="sm"
-              icon={Files}
-              label={thumbnails && showProps ? t("Ocultar miniaturas de páginas") : t("Mostrar miniaturas de páginas")}
-              active={thumbnails && showProps}
-              onClick={() => {
-                const ed = useEditorStore.getState();
-                if (ed.thumbnails && ed.showProps) ed.setThumbnails(false);
-                else {
-                  ed.setThumbnails(true);
-                  if (!ed.showProps) ed.toggleProps();
-                }
-              }}
-            />
-            <IconButton size="sm" icon={PanelRight} label={showProps ? t("Ocultar propiedades") : t("Mostrar propiedades")} active={showProps} onClick={() => useEditorStore.getState().toggleProps()} />
-          </div>
+          {mobile ? (
+            <PhoneViewerOverlays />
+          ) : (
+            <div className="flex h-9 shrink-0 items-center gap-2 border-t border-line bg-surface px-2 text-xs text-muted">
+              <span>{t("Página")}</span>
+              <NumberField
+                value={current + 1}
+                min={1}
+                max={pageCount}
+                onChange={(n) => useEditorStore.getState().goToPage(Math.min(pageCount, Math.max(1, Math.round(n))) - 1)}
+                className="w-16"
+                inputClassName="h-7 text-xs"
+              />
+              <span>{t("de {total}", { total: pageCount })}</span>
+              {placing && (
+                <span className="ml-3 min-w-0 truncate text-brand-600 dark:text-brand-300">
+                  {t("Haz clic en la página para colocar · Esc para cancelar")}
+                </span>
+              )}
+              <span className="ml-auto" />
+              <IconButton
+                size="sm"
+                icon={Files}
+                label={thumbnails && showProps ? t("Ocultar miniaturas de páginas") : t("Mostrar miniaturas de páginas")}
+                active={thumbnails && showProps}
+                onClick={() => {
+                  const ed = useEditorStore.getState();
+                  if (ed.thumbnails && ed.showProps) ed.setThumbnails(false);
+                  else {
+                    ed.setThumbnails(true);
+                    if (!ed.showProps) ed.toggleProps();
+                  }
+                }}
+              />
+              <IconButton size="sm" icon={PanelRight} label={showProps ? t("Ocultar propiedades") : t("Mostrar propiedades")} active={showProps} onClick={() => useEditorStore.getState().toggleProps()} />
+            </div>
+          )}
         </div>
         <PropertiesPanel />
       </div>
+      {mobile && <EditorToolbar hidden={immersive} />}
 
       <SignatureDialog
         open={signatureOpen}

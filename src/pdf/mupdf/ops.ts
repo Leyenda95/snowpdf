@@ -337,7 +337,7 @@ function renderRegion(page: mupdf.Page, grid: Grid, withPng: boolean): { raster:
     const src = pix.getPixels();
     const data = new Uint8ClampedArray(grid.width * grid.height * 3);
     for (let y = 0; y < grid.height; y++) data.set(src.subarray(y * stride, y * stride + grid.width * 3), y * grid.width * 3);
-    return { raster: { data, width: grid.width, height: grid.height, channels: 3 }, png: withPng ? pix.asPNG().slice() : null };
+    return { raster: { data, width: grid.width, height: grid.height, channels: 3 }, png: withPng ? pix.asPNG() : null };
   } finally {
     pix.destroy();
   }
@@ -352,7 +352,7 @@ function encodeJpeg(raster: Raster): Uint8Array {
     const stride = pix.getStride();
     const dst = pix.getPixels();
     for (let y = 0; y < raster.height; y++) dst.set(raster.data.subarray(y * raster.width * 3, (y + 1) * raster.width * 3), y * stride);
-    return pix.asJPEG(PATCH_JPEG_QUALITY, false).slice();
+    return pix.asJPEG(PATCH_JPEG_QUALITY, false);
   } finally {
     pix.destroy();
   }
@@ -487,10 +487,12 @@ function rewriteAsJpeg(doc: mupdf.PDFDocument, ref: mupdf.PDFObject, opts: { qua
     image = doc.loadImage(ref);
     pix = image.toPixmap();
     const cs = pix.getColorSpace();
-    if (!cs) return false;
+    // JPEG has no transparency: an image that carries its own (e.g. JPEG 2000 with an alpha
+    // channel) stays as it is.
+    if (!cs || pix.getAlpha()) return false;
     const gray = cs.getNumberOfComponents() === 1 && !cs.isIndexed();
     const target = gray ? mupdf.ColorSpace.DeviceGray : mupdf.ColorSpace.DeviceRGB;
-    if (pix.getAlpha() || !(gray ? cs.isGray() : cs.isRGB())) {
+    if (!(gray ? cs.isGray() : cs.isRGB())) {
       const converted = pix.convertToColorSpace(target, false);
       pix.destroy();
       pix = converted;
@@ -514,7 +516,7 @@ function rewriteAsJpeg(doc: mupdf.PDFDocument, ref: mupdf.PDFObject, opts: { qua
       pix.destroy();
       pix = warped;
     }
-    const jpeg = pix.asJPEG(opts.quality, false).slice();
+    const jpeg = pix.asJPEG(opts.quality, false);
     if (jpeg.length >= rawLength * opts.maxRatio) return false;
 
     ref.writeRawStream(jpeg);
@@ -661,22 +663,30 @@ export interface RenderedPage {
   height: number;
 }
 
+/** Largest page picture rendered (pixels): about A1 at 280 dpi (A3 at 300 dpi is about 17 MP). */
+const RENDER_MAX_PIXELS = 60_000_000;
+
 export function renderPages(bytes: Uint8Array, opts: RenderPagesOptions, onProgress?: Progress): RenderedPage[] {
   const doc = openPdf(bytes);
   try {
     const all = Array.from({ length: doc.countPages() }, (_, i) => i);
     const pages = opts.pages.length ? opts.pages : all;
-    const zoom = opts.dpi / 72;
     return pages.map((pageIndex, i) => {
       onProgress?.(i / pages.length);
       const page = doc.loadPage(pageIndex);
-      const pix = page.toPixmap(mupdf.Matrix.scale(zoom, zoom), mupdf.ColorSpace.DeviceRGB, false, true);
+      let pix: mupdf.Pixmap | null = null;
       try {
-        pix.setResolution(opts.dpi, opts.dpi);
+        // A poster-sized page at 300 dpi would not fit in memory: such pages get fewer dots per inch.
+        const [x0, y0, x1, y1] = page.getBounds();
+        const fits = Math.sqrt(RENDER_MAX_PIXELS / Math.max(1, (x1 - x0) * (y1 - y0)));
+        const zoom = Math.min(opts.dpi / 72, fits);
+        const dpi = Math.round(zoom * 72);
+        pix = page.toPixmap(mupdf.Matrix.scale(zoom, zoom), mupdf.ColorSpace.DeviceRGB, false, true);
+        pix.setResolution(dpi, dpi);
         const out = opts.format === "png" ? pix.asPNG() : pix.asJPEG(opts.quality ?? 85, false);
-        return { pageIndex, bytes: out.slice(), width: pix.getWidth(), height: pix.getHeight() };
+        return { pageIndex, bytes: out, width: pix.getWidth(), height: pix.getHeight() };
       } finally {
-        pix.destroy();
+        pix?.destroy();
         page.destroy();
       }
     });
@@ -741,6 +751,74 @@ export function textChars(bytes: Uint8Array, pageIndex: number): TextChar[] {
   }
 }
 
+/**
+ * A page's text as MuPDF lays it out, for touch text selection (the phone selects with exact glyph
+ * boxes, like MuPDF's and PDFium's own viewers, instead of the browser selecting pdf.js's
+ * approximate text layer).
+ */
+export interface PageTextLayout {
+  /** Glyphs in reading order (one string per glyph; may be a surrogate pair). */
+  chars: string[];
+  /** Four numbers per glyph: its box x0, y0, x1, y1 in user space (y up, page rotation not applied). */
+  boxes: number[];
+  /** Index of the first glyph of each line, then `chars.length`. */
+  lineStarts: number[];
+  /** Text block (paragraph) of each line. */
+  lineBlocks: number[];
+}
+
+export function textLayout(bytes: Uint8Array, pageIndex: number): PageTextLayout {
+  const doc = openPdf(bytes);
+  try {
+    const page = doc.loadPage(pageIndex);
+    const inv = mupdf.Matrix.invert(page.getTransform());
+    const st = page.toStructuredText("preserve-whitespace");
+    const out: PageTextLayout = { chars: [], boxes: [], lineStarts: [], lineBlocks: [] };
+    let block = -1;
+    try {
+      st.walk({
+        beginTextBlock() {
+          block++;
+        },
+        beginLine() {
+          out.lineStarts.push(out.chars.length);
+          out.lineBlocks.push(block);
+        },
+        onChar(c, _origin, _font, _size, quad) {
+          let x0 = Infinity;
+          let y0 = Infinity;
+          let x1 = -Infinity;
+          let y1 = -Infinity;
+          for (let i = 0; i < 8; i += 2) {
+            const x = inv[0] * quad[i] + inv[2] * quad[i + 1] + inv[4];
+            const y = inv[1] * quad[i] + inv[3] * quad[i + 1] + inv[5];
+            x0 = Math.min(x0, x);
+            x1 = Math.max(x1, x);
+            y0 = Math.min(y0, y);
+            y1 = Math.max(y1, y);
+          }
+          out.chars.push(c);
+          out.boxes.push(x0, y0, x1, y1);
+        },
+        endLine() {
+          // Drop empty lines so every line owns at least one glyph.
+          if (out.lineStarts[out.lineStarts.length - 1] === out.chars.length) {
+            out.lineStarts.pop();
+            out.lineBlocks.pop();
+          }
+        },
+      });
+    } finally {
+      st.destroy();
+      page.destroy();
+    }
+    out.lineStarts.push(out.chars.length);
+    return out;
+  } finally {
+    doc.destroy();
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Font subsetting
 
@@ -772,6 +850,7 @@ export const workerOps = {
   extractText: (a: { bytes: Uint8Array }) => extractText(a.bytes),
   subsetFonts: (a: { bytes: Uint8Array }) => subsetFonts(a.bytes),
   textChars: (a: { bytes: Uint8Array; pageIndex: number }) => textChars(a.bytes, a.pageIndex),
+  textLayout: (a: { bytes: Uint8Array; pageIndex: number }) => textLayout(a.bytes, a.pageIndex),
   eraseRegion: (a: { bytes: Uint8Array; pageIndex: number; box: PdfBox; maxMethod?: EraseMethod }) => eraseRegion(a.bytes, a.pageIndex, a.box, a),
 };
 

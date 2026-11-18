@@ -3,13 +3,137 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/snowpdf.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>SnowPDF</title>
+    <script>
+      // Android: the system font size arrives as a user agent token (see MainActivity.kt, which
+      // keeps the WebView's own text zoom at 100 % so pdf.js's text layer matches the page).
+      // Apply it to the root font size: the UI is sized in rem, the PDF layers in px.
+      (function () {
+        var m = /SnowPDFTextZoom\/(\d+)/.exec(navigator.userAgent);
+        var pct = m ? Math.min(200, Math.max(85, Number(m[1]))) : 100;
+        if (pct !== 100) document.documentElement.style.fontSize = pct + "%";
+      })();
+      // The theme, before the first paint (the app sets it again once it runs; see theme.ts): the
+      // loading screen below must not flash white on someone who uses the dark one.
+      try {
+        var theme = JSON.parse(localStorage.getItem("snowpdf.theme") || '"system"');
+        if (theme === "dark" || (theme !== "light" && matchMedia("(prefers-color-scheme: dark)").matches)) document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
+    <style>
+      /*
+        Loading screen: what is on screen while the app's code loads and starts, instead of a
+        blank page. Plain CSS, here in the page, because nothing else has loaded yet. It fades
+        out by itself as soon as the app has put something in #root (main.tsx then removes it).
+      */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+        background: #f4f4f2;
+        pointer-events: none;
+        transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+      }
+      .dark #splash {
+        background: #0e0e0e;
+      }
+      #root:not(:empty) ~ #splash {
+        opacity: 0;
+        visibility: hidden;
+      }
+      .splash-logo {
+        width: 88px;
+        height: auto;
+        animation: splash-float 2.4s ease-in-out infinite;
+      }
+      .splash-flake {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: splash-spin 6s linear infinite;
+      }
+      .splash-bar {
+        width: 132px;
+        height: 4px;
+        overflow: hidden;
+        border-radius: 4px;
+        background: rgba(255, 79, 31, 0.18);
+      }
+      .splash-bar::after {
+        content: "";
+        display: block;
+        width: 40%;
+        height: 100%;
+        border-radius: 4px;
+        background: #ff4f1f;
+        animation: splash-slide 1.2s ease-in-out infinite;
+      }
+      @keyframes splash-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes splash-float {
+        50% {
+          transform: translateY(-8px);
+        }
+      }
+      @keyframes splash-slide {
+        from {
+          transform: translateX(-110%);
+        }
+        to {
+          transform: translateX(260%);
+        }
+      }
+      /* Less motion asked for: the bar alone, slowly, still says "working". */
+      @media (prefers-reduced-motion: reduce) {
+        .splash-logo,
+        .splash-flake {
+          animation: none;
+        }
+        .splash-bar::after {
+          animation-duration: 2.4s;
+        }
+      }
+    </style>
   </head>
 
   <body>
     <div id="root"></div>
+    <div id="splash" role="status" aria-label="SnowPDF">
+      <svg class="splash-logo" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" viewBox="12 12 96 96" fill="#ff4f1f">
+        <g class="splash-flake">
+          <polygon points="51,21.2 60,16 69,21.2 69,98.8 60,104 51,98.8" />
+          <polygon points="51,21.2 60,16 69,21.2 69,98.8 60,104 51,98.8" transform="rotate(60 60 60)" />
+          <polygon points="51,21.2 60,16 69,21.2 69,98.8 60,104 51,98.8" transform="rotate(120 60 60)" />
+        </g>
+      </svg>
+      <div class="splash-bar"></div>
+    </div>
+    <script>
+      // Very old Android System WebView (the styles need Chrome 111+, e.g. color-mix(); newer JS
+      // built-ins are polyfilled in src/polyfills.ts): the screen would stay blank or broken, so
+      // explain how to fix it instead.
+      setTimeout(function () {
+        var root = document.getElementById("root");
+        if (!root || root.childElementCount > 0 || (window.CSS && CSS.supports("color", "color-mix(in oklab, red, blue)"))) return;
+        var es = /^es/i.test(navigator.language || "");
+        root.innerHTML =
+          '<div style="padding:32px 24px;font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:0 auto">' +
+          "<h1 style=\"font-size:20px;margin:0 0 12px\">SnowPDF</h1><p>" +
+          (es
+            ? "El navegador interno del sistema (Android System WebView) está desactualizado. Actualízalo desde Google Play y vuelve a abrir SnowPDF."
+            : "The system web engine (Android System WebView) is out of date. Update it from Google Play and open SnowPDF again.") +
+          "</p></div>";
+      }, 4000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

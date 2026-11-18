@@ -1,7 +1,7 @@
 import { useAppStore } from "@/model/appStore";
 import { useDocStore } from "@/model/docStore";
 import { getAsset, getFont, getSource } from "@/model/registry";
-import { baseName, platform } from "@/platform";
+import { baseName, displayPath, platform } from "@/platform";
 import { composeDocument } from "@/pdf/compose";
 import { stripPdfExtension } from "@/pdf/docUtils";
 import { callMupdf } from "@/pdf/mupdf/client";
@@ -9,6 +9,7 @@ import type { CompressLevel } from "@/pdf/mupdf/ops";
 import { protectPdf, type ProtectOptions } from "@/pdf/protect";
 import { confirmDialog, toast } from "@/ui";
 import { cleanSuffix, usePrefs } from "@/model/prefs";
+import { useTabsStore } from "@/model/tabs";
 import { useExportPrefs } from "./exportPrefs";
 import { whenErasesSettled } from "./erase";
 import { t } from "@/i18n";
@@ -87,7 +88,7 @@ export async function extractPages(pageIds: string[]): Promise<void> {
     app.setBusy(null);
     const name = `${stripPdfExtension(useDocStore.getState().title)}${t("_extraido")}.pdf`;
     const path = await platform.saveFile(bytes, { suggestedName: name, kind: "pdf", title: t("Guardar páginas extraídas") });
-    if (path) toast.success(t(pageIds.length === 1 ? "{n} página extraída" : "{n} páginas extraídas", { n: pageIds.length }), { description: path });
+    if (path) toast.success(t(pageIds.length === 1 ? "{n} página extraída" : "{n} páginas extraídas", { n: pageIds.length }), { description: displayPath(path) });
   } catch (err) {
     toast.error(t("No se pudieron extraer las páginas"), { description: err instanceof Error ? err.message : String(err) });
   } finally {
@@ -110,6 +111,7 @@ function suggestedName(): string {
 export async function saveWorkspace(opts: ExportOptions = DEFAULT_EXPORT, saveAs = false): Promise<boolean> {
   const app = useAppStore.getState();
   const state = useDocStore.getState();
+  const tabId = useTabsStore.getState().activeId;
   const redacting = hasRedactions();
   if (redacting) {
     const ok = await confirmDialog({
@@ -133,12 +135,15 @@ export async function saveWorkspace(opts: ExportOptions = DEFAULT_EXPORT, saveAs
       path = await platform.saveFile(bytes, { suggestedName: suggestedName(), kind: "pdf", title: t("Guardar PDF") });
       if (!path) return false;
     }
-    // Re-arm form change tracking (pdf.js only reports the first change).
-    for (const id of Object.keys(useDocStore.getState().sources)) getSource(id).pdf.annotationStorage.resetModified();
     const savedToDisk = platform.kind === "tauri" && !!path;
-    useDocStore.getState().markSaved(savedToDisk ? path : state.filePath, savedToDisk && path ? baseName(path) : undefined);
+    // The store holds whichever document is on screen: only mark the one that was saved.
+    if (useTabsStore.getState().activeId === tabId) {
+      // Re-arm form change tracking (pdf.js only reports the first change).
+      for (const id of Object.keys(useDocStore.getState().sources)) getSource(id).pdf.annotationStorage.resetModified();
+      useDocStore.getState().markSaved(savedToDisk ? path : state.filePath, savedToDisk && path ? baseName(path) : undefined);
+    }
     if (savedToDisk && path) app.addRecent(path, baseName(path));
-    toast.success(t("PDF guardado"), { description: savedToDisk ? path ?? undefined : t("Descargado en tu carpeta de descargas") });
+    toast.success(t("PDF guardado"), { description: savedToDisk ? (path ? displayPath(path) : undefined) : t("Descargado en tu carpeta de descargas") });
     return true;
   } catch (err) {
     toast.error(t("No se pudo guardar"), { description: err instanceof Error ? err.message : String(err) });

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { FontAsset, FontFamily, Frame, SymbolName } from "@/model/types";
 import { openingView, usePrefs } from "@/model/prefs";
+import { MOBILE_QUERY, isMobileLayout } from "@/ui/responsive";
 import { closestFace, findSystemFamily, loadSystemFace } from "@/render/systemFonts";
 
 export type EditorTool =
@@ -88,6 +89,8 @@ interface EditorState {
   toolsPanel: boolean;
   /** Entry of the "Herramientas" pane to open as soon as the pane is shown (from the home page). */
   toolRequest: string | null;
+  /** Phone only: reading mode with the header and toolbar slid away (a tap on the page toggles it). */
+  immersive: boolean;
 
   reset(tool?: EditorTool): void;
   setTool(tool: EditorTool): void;
@@ -105,6 +108,9 @@ interface EditorState {
   setFlash(flash: EditorState["flash"]): void;
   setSignatureDialog(open: boolean): void;
   setToolsPanel(open: boolean): void;
+  /** Phone layout: close every drawer/sheet (tools, search, properties, pages). */
+  closePhoneOverlays(): void;
+  setImmersive(on: boolean): void;
   /** Open the "Herramientas" pane on one of its entries (DOC_TOOLS id). */
   requestDocTool(id: string | null): void;
 }
@@ -112,6 +118,8 @@ interface EditorState {
 const TOOLS_PANEL_KEY = "snowpdf.toolsPanel";
 
 function loadToolsPanel(): boolean {
+  // Phones start with the drawer closed whatever the desktop preference says.
+  if (isMobileLayout()) return false;
   try {
     return localStorage.getItem(TOOLS_PANEL_KEY) === "1";
   } catch {
@@ -168,6 +176,9 @@ function loadStyles(): ToolStyles {
   }
 }
 
+/** Every phone overlay closed. */
+const PHONE_CLOSED = { toolsPanel: false, sidebar: null, showProps: false, thumbnails: false } as const;
+
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 6;
 
@@ -180,8 +191,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   fit: "width",
   currentPage: 0,
   sidebar: null,
-  thumbnails: true,
-  showProps: true,
+  thumbnails: !isMobileLayout(),
+  showProps: !isMobileLayout(),
   styles: loadStyles(),
   scrollRequest: null,
   scroll: { top: 0, left: 0 },
@@ -189,22 +200,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   signatureDialog: false,
   toolsPanel: loadToolsPanel(),
   toolRequest: null,
+  immersive: false,
 
   reset: (tool = "select") =>
-    set({ tool, placing: null, selection: [], editingId: null, sidebar: null, ...openingView(), currentPage: 0, scrollRequest: null, scroll: { top: 0, left: 0 }, flash: null, signatureDialog: tool === "signature" }),
+    set({ tool, immersive: false, placing: null, selection: [], editingId: null, sidebar: null, ...openingView(), ...(isMobileLayout() ? PHONE_CLOSED : {}), currentPage: 0, scrollRequest: null, scroll: { top: 0, left: 0 }, flash: null, signatureDialog: tool === "signature" }),
   // Leaving "edit text" clears the selection: edited texts are page content in the other tools.
   setTool: (tool) =>
     set({ tool, placing: tool === get().tool ? get().placing : null, editingId: null, selection: tool === "select" && get().tool !== "editText" ? get().selection : [] }),
-  setPlacing: (placing) => set({ placing }),
+  // Phones: the page must be visible to place something on it.
+  setPlacing: (placing) => set(placing && isMobileLayout() ? { placing, ...PHONE_CLOSED } : { placing }),
   select: (selection) => set({ selection, editingId: selection.includes(get().editingId ?? "") ? get().editingId : null }),
   setEditing: (editingId) => set({ editingId, selection: editingId ? [editingId] : get().selection }),
   setZoom: (zoom, fit = null) => set({ zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom)), fit }),
   setCurrentPage: (currentPage) => set({ currentPage }),
   setScroll: (scroll) => set({ scroll }),
   goToPage: (index) => set({ currentPage: index, scrollRequest: index }),
-  setSidebar: (sidebar) => set({ sidebar }),
-  setThumbnails: (thumbnails) => set({ thumbnails }),
-  toggleProps: () => set((s) => ({ showProps: !s.showProps })),
+  // Phones show one overlay at a time: opening one closes the others.
+  setSidebar: (sidebar) => set(sidebar && isMobileLayout() ? { ...PHONE_CLOSED, sidebar } : { sidebar }),
+  setThumbnails: (thumbnails) => set(thumbnails && isMobileLayout() ? { ...PHONE_CLOSED, thumbnails } : { thumbnails }),
+  toggleProps: () => set((s) => (!s.showProps && isMobileLayout() ? { ...PHONE_CLOSED, showProps: true } : { showProps: !s.showProps })),
+  closePhoneOverlays: () => set(PHONE_CLOSED),
+  setImmersive: (immersive) => set({ immersive: immersive && isMobileLayout() }),
   setStyle: (key, patch) => {
     // Text defaults: size, font and colour are remembered between texts (not bold/italic).
     const next = key === "text" ? pickTextDefaults(patch as Partial<ToolStyles["text"]>) : patch;
@@ -219,14 +235,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setFlash: (flash) => set({ flash }),
   setSignatureDialog: (signatureDialog) => set({ signatureDialog }),
   setToolsPanel: (toolsPanel) => {
-    try {
-      localStorage.setItem(TOOLS_PANEL_KEY, toolsPanel ? "1" : "0");
-    } catch {
-      // Not persisted: fine.
+    // The remembered preference belongs to the desktop layout.
+    if (!isMobileLayout()) {
+      try {
+        localStorage.setItem(TOOLS_PANEL_KEY, toolsPanel ? "1" : "0");
+      } catch {
+        // Not persisted: fine.
+      }
     }
-    set({ toolsPanel });
+    set(toolsPanel && isMobileLayout() ? { ...PHONE_CLOSED, toolsPanel } : { toolsPanel });
   },
   // Shows the pane for this once, without changing the remembered open/closed preference.
-  requestDocTool: (toolRequest) => set({ toolRequest, toolsPanel: true }),
+  requestDocTool: (toolRequest) => set(isMobileLayout() ? { ...PHONE_CLOSED, toolRequest, toolsPanel: true } : { toolRequest, toolsPanel: true }),
 }));
 
+
+// Crossing the phone breakpoint at runtime (rotation, split screen, resized browser): phone
+// overlays all start closed; coming back to the desktop layout restores the docked panels.
+if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+  window.matchMedia(MOBILE_QUERY).addEventListener("change", () => {
+    if (isMobileLayout()) useEditorStore.setState(PHONE_CLOSED);
+    else useEditorStore.setState({ immersive: false, showProps: true, thumbnails: openingView().thumbnails, toolsPanel: loadToolsPanel() });
+  });
+}

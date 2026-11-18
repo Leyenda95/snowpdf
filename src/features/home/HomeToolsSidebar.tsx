@@ -1,32 +1,18 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef } from "react";
 import { Search, SearchX, X } from "lucide-react";
 import { onListKeyDown } from "@/features/editor/tools/ToolsPanel";
 import { IconButton, TextField, cn } from "@/ui";
-import { HOME_TOOLS, matchesHomeQuery, type HomeToolEntry } from "./homeTools";
+import { useHomeTools } from "./useHomeTools";
 import { t } from "@/i18n";
 
-/** Left column of the home page, styled like the editor's "Herramientas" pane. */
+/** Left column of the home page, styled like the editor's "Herramientas" pane. Desktop only. */
 export function HomeToolsSidebar() {
-  const [query, setQuery] = useState("");
-  const results = useMemo(() => HOME_TOOLS.filter((entry) => matchesHomeQuery(entry, query)), [query]);
-  const groups = useMemo(() => [...new Set(results.map((entry) => entry.group))], [results]);
+  const { query, setQuery, results, groups, open } = useHomeTools();
   const listRef = useRef<HTMLDivElement>(null);
-  // Ignore clicks while a tool is still opening (file picker, loading the PDF).
-  const busy = useRef(false);
-
-  const open = async (entry: HomeToolEntry) => {
-    if (busy.current) return;
-    busy.current = true;
-    try {
-      await entry.run();
-    } finally {
-      busy.current = false;
-    }
-  };
 
   return (
-    <aside aria-label={t("Herramientas")} className="hidden w-[272px] shrink-0 flex-col border-r border-line bg-surface md:flex">
-      <div className="flex h-11 shrink-0 items-center px-4">
+    <aside aria-label={t("Herramientas")} className="hidden w-[272px] shrink-0 flex-col border-r border-rule bg-surface md:flex">
+      <div className="flex h-11 shrink-0 items-center justify-between pl-4 pr-4">
         <h2 className="text-sm font-semibold text-fg">{t("Herramientas")}</h2>
       </div>
       <div className="shrink-0 px-3 pb-2">

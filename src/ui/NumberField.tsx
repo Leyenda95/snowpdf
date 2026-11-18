@@ -103,7 +103,8 @@ export function NumberField({
         <input
           id={id}
           type="text"
-          inputMode="decimal"
+          // The decimal keypad of phones has no minus key.
+          inputMode={min !== undefined && min < 0 ? "text" : "decimal"}
           role="spinbutton"
           autoComplete="off"
           aria-valuenow={value}

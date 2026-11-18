@@ -146,11 +146,11 @@ export function DrawCanvas({ kind, color, onColorChange, onSourceChange }: DrawC
         {/* Baseline guide, kept outside the canvas so it never ends up in the exported image. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-6 border-b border-dashed border-slate-300"
+          className="pointer-events-none absolute inset-x-6 border-b border-dashed border-neutral-300"
           style={{ top: baselineTop }}
         />
         {strokes.length === 0 && !drawing && (
-          <p className="pointer-events-none absolute inset-x-0 top-6 text-center text-sm text-slate-400">
+          <p className="pointer-events-none absolute inset-x-0 top-6 text-center text-sm text-neutral-400">
             {kind === "firma" ? t("Dibuja tu firma aquí") : t("Dibuja tus iniciales aquí")}
           </p>
         )}

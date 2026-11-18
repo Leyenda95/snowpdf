@@ -50,7 +50,8 @@ export function TextEditor({ obj, scale }: { obj: TextObject; scale: number }) {
         updateObject(obj.id, { text: next.text, frame: next.frame, links } as Partial<TextObject>, session.current);
       }}
       onKeyDown={(e) => {
-        e.stopPropagation();
+        // Typing must not trigger the editor's shortcuts, except saving.
+        if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s")) e.stopPropagation();
         if (e.key === "Escape" || (e.key === "Enter" && (e.ctrlKey || e.metaKey))) {
           e.preventDefault();
           ref.current?.blur();
@@ -66,7 +67,7 @@ export function TextEditor({ obj, scale }: { obj: TextObject; scale: number }) {
         margin: 0,
         border: 0,
         ...textBoxStyle(obj, scale),
-        outline: "1.5px solid #0b7cf5",
+        outline: "1.5px solid #ff4f1f",
         outlineOffset: 1,
         resize: "none",
         overflow: "hidden",
@@ -77,7 +78,7 @@ export function TextEditor({ obj, scale }: { obj: TextObject; scale: number }) {
         color: obj.color,
         textAlign: obj.align,
         opacity: obj.opacity,
-        caretColor: "#0b7cf5",
+        caretColor: "#ff4f1f",
       }}
     />
   );

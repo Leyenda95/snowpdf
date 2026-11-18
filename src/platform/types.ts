@@ -2,6 +2,9 @@ import type { Msg } from "@/i18n";
 
 export type FileKind = "pdf" | "image";
 
+/** Running inside the Android app (or an Android browser). */
+export const IS_ANDROID = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+
 export interface PickedFile {
   name: string;
   /** Absolute path on disk (desktop) or null (browser / drag & drop). */
@@ -32,6 +35,11 @@ export interface Platform {
   readonly kind: "tauri" | "browser";
   /** Resolves to [] when the user cancels. */
   openFiles(opts: OpenOptions): Promise<PickedFile[]>;
+  /**
+   * Takes a picture with the system camera app (phones; elsewhere it asks for an image file).
+   * Resolves to null when cancelled. Must be called from a tap/click handler.
+   */
+  capturePhoto(): Promise<PickedFile | null>;
   /** Asks where to save. Resolves to the saved path/name, or null when cancelled. */
   saveFile(bytes: Uint8Array, opts: SaveOptions): Promise<string | null>;
   /** Writes to a known path without asking (desktop "Guardar"). */
@@ -41,6 +49,11 @@ export interface Platform {
   readFile(path: string): Promise<PickedFile>;
   /** Files passed on the command line (file association). */
   takeStartupFiles(): Promise<string[]>;
+  /**
+   * Calls `handler` when `takeStartupFiles` may have new files while the app is running: a second
+   * launch on desktop (double-click on another PDF), "Abrir con" on Android. Returns the unsubscribe.
+   */
+  onIncomingFiles(handler: () => void): () => void;
   /** Installed fonts (desktop): registry name, e.g. "Segoe UI Semibold (TrueType)", and file. */
   listSystemFonts(): Promise<{ name: string; path: string }[]>;
   /** Opens an http(s)/mailto URL in the system's default application. */
@@ -62,8 +75,24 @@ export const SAVE_FILTERS: Record<SaveKind, { name: Msg; extensions: string[]; m
 };
 
 export function baseName(path: string): string {
+  if (path.startsWith("content://")) {
+    let decoded = path;
+    try {
+      decoded = decodeURIComponent(path);
+    } catch {
+      // Malformed escape sequences: use the raw text.
+    }
+    const afterSlash = decoded.slice(decoded.lastIndexOf("/") + 1);
+    const name = afterSlash.slice(afterSlash.lastIndexOf(":") + 1);
+    return /\.[^./\\]+$/.test(name) ? name : "documento.pdf";
+  }
   const parts = path.split(/[\\/]/);
   return parts[parts.length - 1] || path;
+}
+
+/** What to show the user for a saved location: Android content URIs are opaque, show the file name. */
+export function displayPath(path: string): string {
+  return path.startsWith("content://") ? baseName(path) : path;
 }
 
 export function kindOfName(name: string): FileKind | null {

@@ -1,8 +1,9 @@
 import { useAppStore } from "@/model/appStore";
 import { useDocStore } from "@/model/docStore";
 import { getSource, hasSource } from "@/model/registry";
+import { useTabsStore } from "@/model/tabs";
 import { loadSource } from "@/model/workspace";
-import { platform } from "@/platform";
+import { displayPath, platform } from "@/platform";
 import type { ToolFile, ToolModule, ToolResult } from "@/features/tools/types";
 import { messageOf, uniqueOutputs } from "@/features/tools/utils";
 import { confirmDialog, toast } from "@/ui";
@@ -55,7 +56,10 @@ async function composedFile(preview: ToolFile): Promise<ToolFile> {
  * them exactly.
  */
 export async function replaceWorkspaceWith(bytes: Uint8Array): Promise<void> {
-  const { info, pages } = await loadSource({ name: useDocStore.getState().title, path: null, bytes });
+  const tabId = useTabsStore.getState().activeId ?? "default";
+  const { info, pages } = await loadSource({ name: useDocStore.getState().title, path: null, bytes }, tabId);
+  // The result is for the document it was made from.
+  if ((useTabsStore.getState().activeId ?? "default") !== tabId) return;
   const store = useDocStore.getState();
   store.addSources([info]);
   store.apply((d) => {
@@ -95,7 +99,7 @@ async function saveOutputs(result: ToolResult): Promise<void> {
         outputs.map(({ name, bytes }) => ({ name, bytes })),
         { zipName: result.zipName },
       );
-  if (where) toast.success(result.summary, { description: where });
+  if (where) toast.success(result.summary, { description: displayPath(where) });
 }
 
 /**

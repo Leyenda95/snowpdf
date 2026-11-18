@@ -1,7 +1,8 @@
 import {
   DndContext,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCenter,
   useSensor,
   useSensors,
@@ -59,7 +60,9 @@ function SortableCard({ file, index, size, extras, disabled, onRemove }: ItemPro
 
 export function FileList({ files, size, sortable, multiple, adding, disabled, extrasFor, onAdd, onRemove, onReorder }: FileListProps) {
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    // A finger needs a long press to drag, so one-finger scrolling keeps working.
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -113,8 +116,8 @@ export function FileList({ files, size, sortable, multiple, adding, disabled, ex
           onClick={onAdd}
           disabled={disabled || adding}
           className={cn(
-            "flex w-44 flex-col items-center justify-center gap-2 self-stretch rounded-xl border-2 border-dashed border-line-strong bg-surface-2/60 p-4 text-sm font-medium text-muted outline-none transition-colors",
-            "hover:border-brand-400 hover:bg-brand-50/60 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand-500/50 dark:hover:bg-brand-500/5 dark:hover:text-brand-200",
+            "flex w-44 flex-col items-center justify-center gap-2 self-stretch rounded-xl border-2 border-dashed border-line-strong bg-surface-2/60 max-md:rounded-3xl p-4 text-sm font-medium text-muted outline-none transition-colors",
+            "hover:border-fg hover:bg-surface-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-brand-500/50",
             "min-h-56 disabled:cursor-not-allowed disabled:opacity-60",
           )}
         >

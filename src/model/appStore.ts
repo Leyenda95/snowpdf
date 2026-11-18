@@ -7,6 +7,7 @@ export type View =
   | { name: "editor" }
   | { name: "organize" }
   | { name: "tool"; toolId: BatchToolId }
+  | { name: "scan" }
   /** `back`: where "Volver" returns to. */
   | { name: "settings"; back: View };
 
@@ -66,7 +67,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   addRecent: (path, name) => {
-    if (!usePrefs.getState().rememberRecent) return;
+    // Android content:// URIs lose their permission when the app restarts: never remember them.
+    if (!usePrefs.getState().rememberRecent || path.startsWith("content://")) return;
     const recent = [{ path, name, openedAt: Date.now() }, ...get().recent.filter((r) => r.path !== path)].slice(0, 12);
     persist(RECENT_KEY, recent);
     set({ recent });

@@ -30,6 +30,10 @@ import { ObjectContextMenu, useOrderShortcuts } from "./ObjectContextMenu";
 import { ObjectView } from "./ObjectView";
 import { SelectionFrame } from "./SelectionFrame";
 import { TextEditor } from "./TextEditor";
+import { TouchSelectionLayer } from "./TouchSelectionLayer";
+import { longPressSelectHandled, useLongPressSelect } from "./useLongPressSelect";
+import { useTouchSelection } from "../touchSelection";
+import { useIsMobile } from "@/ui";
 
 /** Tools that stay active after creating an object (repeated marks are the norm). */
 const STICKY: EditorTool[] = ["ink", "highlight", "symbol", "redact", "whiteout", "erase", "date"];
@@ -95,6 +99,8 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
   const placing = useEditorStore((s) => s.placing);
   const flash = useEditorStore((s) => (s.flash?.pageId === page.id ? s.flash : null));
   const rootRef = useRef<HTMLDivElement>(null);
+  /** Object a finger went down on while it was not selected: its tap selects it. */
+  const tapTarget = useRef<string | null>(null);
   useEffect(() => {
     if (!flash) return;
     const t = setTimeout(() => {
@@ -108,6 +114,11 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
   const [hover, setHover] = useState<EditTarget | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
   useOrderShortcuts();
+
+  // Phone: long press selects text with exact glyph boxes (the native selection is off there).
+  const mobile = useIsMobile();
+  const hasTouchSel = useTouchSelection((s) => s.sel?.pageId === page.id);
+  useLongPressSelect(page, geom, rootRef, mobile && (tool === "select" || tool === "highlight") && !placing && !editingId);
 
   // Selecting objects must only show their frames: drop any native text selection (text boxes, pdf.js layer).
   useEffect(() => {
@@ -247,14 +258,20 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
     if (tool !== "highlight") return;
     const pageEl = rootRef.current?.closest<HTMLElement>(".snow-page");
     if (!pageEl) return;
-    let down: { x: number; y: number } | null = null;
+    let down: { x: number; y: number; id: number } | null = null;
     const onDown = (e: PointerEvent) => {
-      if (e.button === 0) down = { x: e.clientX, y: e.clientY };
+      if (e.button === 0) down = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    };
+    // A scroll or a pinch is not a highlight: forget the press.
+    const forget = (e: PointerEvent) => {
+      if (e.type === "pointercancel" ? e.pointerId === down?.id : e.pointerType === "touch" && e.pointerId !== down?.id) down = null;
     };
     const onUp = (e: PointerEvent) => {
       const start = down;
+      if (!start || e.pointerId !== start.id) return;
       down = null;
-      if (!start) return;
+      // A phone long press already made its own selection; its drag must not also draw an area.
+      if (longPressSelectHandled()) return;
       const styles = useEditorStore.getState().styles;
       const sel = window.getSelection();
       const pr = pageEl.getBoundingClientRect();
@@ -276,7 +293,8 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
         }
         for (const r of merged) created.push(createShape("highlight", page.id, frameFromScreenRect(geom, r.x0, r.y0, r.x1, r.y1), styles));
         sel.removeAllRanges();
-      } else if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) {
+      } else if (e.pointerType !== "touch" && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 6) {
+        // Mouse or pen only: a finger dragged over the page scrolls it (phones highlight with a long press).
         created.push(
           createShape("highlight", page.id, frameFromScreenRect(geom, start.x - pr.left, start.y - pr.top, e.clientX - pr.left, e.clientY - pr.top), styles),
         );
@@ -285,9 +303,13 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
     };
     pageEl.addEventListener("pointerdown", onDown);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", forget);
+    window.addEventListener("pointerdown", forget, true);
     return () => {
       pageEl.removeEventListener("pointerdown", onDown);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", forget);
+      window.removeEventListener("pointerdown", forget, true);
     };
   }, [tool, page.id, geom]);
 
@@ -404,8 +426,9 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
             }
             setDraft({ kind: "line", x0: p.x, y0: p.y, x1, y1 });
           },
-          (moved, ev) => {
+          (moved, ev, interrupted) => {
             setDraft(null);
+            if (interrupted) return;
             const end = moved ? local(ev) : { x: p.x + 120 * geom.scale, y: p.y };
             const obj = createLine(tool, page.id, frameFromScreenSegment(geom, p, end, 6), useEditorStore.getState().styles);
             addObjects([obj]);
@@ -425,9 +448,9 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
             points.push(q.x, q.y);
             setDraft({ kind: "ink", points: [...points] });
           },
-          () => {
+          (_moved, _ev, interrupted) => {
             setDraft(null);
-            commitInk(points);
+            if (!interrupted) commitInk(points);
           },
           0,
         );
@@ -448,8 +471,9 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
               }
               setDraft({ kind: "rect", x0: p.x, y0: p.y, x1: p.x + w, y1: p.y + h });
             },
-            (moved, ev) => {
+            (moved, ev, interrupted) => {
               setDraft(null);
+              if (interrupted) return;
               const kind = tool as "rect" | "ellipse" | "whiteout" | "redact" | "highlight";
               let frame;
               const q = local(ev);
@@ -585,6 +609,7 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
         return (
           <div
             key={`link-${c.key}`}
+            data-link
             title={c.link.url ?? undefined}
             style={{
               ...frameStyle(boxToFrame(c.box), geom),
@@ -607,6 +632,10 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
         const pageContent = o.kind === "text" && !!o.replaces && tool !== "editText" && !editing;
         const editableText = o.kind === "text" && !o.replaces && tool === "text";
         const interactive = (objectsInteractive && !pageContent) || editableText || editing;
+        // Finger or pen on an object that is not selected: the browser keeps the gesture, so a swipe
+        // scrolls the page and a tap selects the object (see onClick). Once selected, a drag moves it.
+        // touch-action is read when the gesture starts, hence it follows the selection.
+        const tapSelects = objectsInteractive && !pageContent && !editing && !selection.includes(o.id);
         return (
           <div
             key={o.id}
@@ -615,18 +644,23 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
               ...frameStyle(o.frame, geom),
               pointerEvents: interactive ? "auto" : "none",
               cursor: editing ? "text" : interactive ? "move" : undefined,
-              touchAction: "none",
+              touchAction: tapSelects ? undefined : "none",
             }}
             onPointerDown={
               interactive && !editing
                 ? (e) => {
                     if (e.button !== 0) return;
+                    tapTarget.current = null;
                     const ed = useEditorStore.getState();
                     ed.setCurrentPage(index);
                     if (editableText) {
                       e.stopPropagation();
                       ed.setTool("select");
                       ed.setEditing(o.id);
+                      return;
+                    }
+                    if (e.pointerType !== "mouse" && !ed.selection.includes(o.id)) {
+                      tapTarget.current = o.id;
                       return;
                     }
                     if (e.shiftKey) {
@@ -641,6 +675,16 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
                     const ids = ed.selection.includes(o.id) ? ed.selection.filter((id) => mine.some((m) => m.id === id)) : [o.id];
                     ed.select(ids);
                     moveGesture(e, ids, geom);
+                  }
+                : undefined
+            }
+            onClick={
+              interactive && !editing
+                ? () => {
+                    // Only a tap gets here: the browser sends no click after scrolling.
+                    if (tapTarget.current !== o.id) return;
+                    tapTarget.current = null;
+                    useEditorStore.getState().select([o.id]);
                   }
                 : undefined
             }
@@ -670,6 +714,8 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
         !editingId &&
         mine.filter((o) => selection.includes(o.id) && !(o.kind === "text" && o.replaces)).map((o) => <SelectionFrame key={`sel-${o.id}`} obj={o} geom={geom} overlayEl={rootRef.current} />)}
 
+      {mobile && hasTouchSel && <TouchSelectionLayer page={page} geom={geom} />}
+
       {menu && <ObjectContextMenu x={menu.x} y={menu.y} ids={menu.ids} onClose={() => setMenu(null)} />}
 
       {flash?.frames.map((f, i) => (
@@ -685,8 +731,8 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
           style={{
             ...frameStyle(hover.kind === "line" ? hover.line.frame : (mine.find((m) => m.id === hover.obj.id)?.frame ?? hover.obj.frame), geom),
             pointerEvents: "none",
-            outline: "1.5px dashed #0b7cf5",
-            background: "rgb(11 124 245 / 0.07)",
+            outline: "1.5px dashed #ff4f1f",
+            background: "rgb(255 79 31 / 0.07)",
             borderRadius: 2,
           }}
         />
@@ -701,8 +747,8 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
             width: Math.abs(draft.x1 - draft.x0),
             height: Math.abs(draft.y1 - draft.y0),
             pointerEvents: "none",
-            border: "1.5px dashed #0b7cf5",
-            background: tool === "whiteout" ? "#ffffff" : tool === "highlight" ? "rgb(250 204 21 / 0.4)" : "rgb(11 124 245 / 0.06)",
+            border: "1.5px dashed #ff4f1f",
+            background: tool === "whiteout" ? "#ffffff" : tool === "highlight" ? "rgb(250 204 21 / 0.4)" : "rgb(255 79 31 / 0.06)",
             borderRadius: tool === "ellipse" ? "50%" : 0,
           }}
         />
@@ -710,7 +756,7 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
       {draft && draft.kind !== "rect" && (
         <svg className="absolute inset-0 h-full w-full overflow-visible" style={{ pointerEvents: "none" }}>
           {draft.kind === "line" ? (
-            <line x1={draft.x0} y1={draft.y0} x2={draft.x1} y2={draft.y1} stroke="#0b7cf5" strokeWidth={2} strokeDasharray="5 4" />
+            <line x1={draft.x0} y1={draft.y0} x2={draft.x1} y2={draft.y1} stroke="#ff4f1f" strokeWidth={2} strokeDasharray="5 4" />
           ) : (
             <polyline
               points={draft.points.join(" ")}
@@ -735,7 +781,7 @@ export function PageOverlay({ page, index, geom }: { page: PageRef; index: numbe
             width: ghostW,
             opacity: 0.6,
             pointerEvents: "none",
-            outline: "1px dashed #0b7cf5",
+            outline: "1px dashed #ff4f1f",
           }}
         />
       )}

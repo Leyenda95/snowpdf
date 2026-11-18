@@ -17,6 +17,8 @@ export interface OpenDocumentsOptions {
   view?: "editor" | "organize";
   /** Several files become one document (organize/merge) instead of one tab each. */
   combine?: boolean;
+  /** The document only exists in memory (e.g. a fresh scan): closing it asks to save first. */
+  unsaved?: boolean;
 }
 
 class Cancelled extends Error {}
@@ -25,19 +27,36 @@ function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * Shows a dialog in the middle of a busy task. The busy overlay sits above dialogs and swallows
+ * every key, so it steps aside while the dialog is open and comes back afterwards (unless the
+ * busy state was changed meanwhile).
+ */
+async function askWhileBusy<T>(ask: () => Promise<T>): Promise<T> {
+  const busy = useAppStore.getState().busy;
+  if (busy !== null) useAppStore.getState().setBusy(null);
+  try {
+    return await ask();
+  } finally {
+    if (busy !== null && useAppStore.getState().busy === null) useAppStore.getState().setBusy(busy);
+  }
+}
+
 /** Ask for the password until it is right; resolve with decrypted bytes. */
 async function decryptInteractively(file: PickedFile): Promise<Uint8Array> {
   const info = await callMupdf("inspect", { bytes: file.bytes });
   if (!info.encrypted) return file.bytes;
   if (!info.needsPassword) return callMupdf("decrypt", { bytes: file.bytes });
   for (let attempt = 0; ; attempt++) {
-    const password = await promptDialog({
-      title: t("PDF protegido"),
-      message: attempt === 0 ? t("«{name}» necesita contraseña para abrirse.", { name: file.name }) : t("La contraseña no es correcta. Inténtalo de nuevo."),
-      label: t("Contraseña"),
-      type: "password",
-      confirmLabel: t("Abrir"),
-    });
+    const password = await askWhileBusy(() =>
+      promptDialog({
+        title: t("PDF protegido"),
+        message: attempt === 0 ? t("«{name}» necesita contraseña para abrirse.", { name: file.name }) : t("La contraseña no es correcta. Inténtalo de nuevo."),
+        label: t("Contraseña"),
+        type: "password",
+        confirmLabel: t("Abrir"),
+      }),
+    );
     if (password === null) throw new Cancelled();
     try {
       return await callMupdf("decrypt", { bytes: file.bytes, password });
@@ -59,8 +78,8 @@ async function imageToPdf(bytes: Uint8Array): Promise<Uint8Array> {
   return savePdf(doc);
 }
 
-/** Load a file as a new source: registers it and returns its pages. */
-export async function loadSource(file: PickedFile): Promise<{ info: SourceInfo; pages: PageRef[] }> {
+/** Load a file as a new source of the tab `owner`: registers it and returns its pages. */
+export async function loadSource(file: PickedFile, owner: string): Promise<{ info: SourceInfo; pages: PageRef[] }> {
   const kind = kindOfName(file.name) ?? "pdf";
   let bytes = kind === "image" ? await imageToPdf(file.bytes) : file.bytes;
   let wasEncrypted = false;
@@ -71,7 +90,7 @@ export async function loadSource(file: PickedFile): Promise<{ info: SourceInfo; 
   }
   const pdf = await loadPdfjs(bytes);
   const id = newId("src");
-  putSource(id, bytes, pdf);
+  putSource(id, bytes, pdf, owner);
   // Typing in a form field happens in the visible tab, so it marks the active document.
   (pdf.annotationStorage as { onSetModified: (() => void) | null }).onSetModified = () => useDocStore.getState().markFormChanged();
 
@@ -126,7 +145,7 @@ export async function openDocuments(files: PickedFile[], opts: OpenDocumentsOpti
     const loaded: { info: SourceInfo; pages: PageRef[] }[] = [];
     for (const f of files) {
       try {
-        loaded.push(await loadSource(f));
+        loaded.push(await loadSource(f, tabId));
       } catch (err) {
         if (!(err instanceof Cancelled)) toast.error(t("No se pudo abrir «{name}»", { name: f.name }), { description: message(err) });
       }
@@ -143,7 +162,7 @@ export async function openDocuments(files: PickedFile[], opts: OpenDocumentsOpti
         filePath: loaded.length === 1 && !first.wasEncrypted ? first.path : null,
         sources: Object.fromEntries(loaded.map((l) => [l.info.id, l.info])),
         doc: { pages: loaded.flatMap((l) => l.pages), objects: [] },
-        dirty: loaded.length > 1,
+        dirty: loaded.length > 1 || !!opts.unsaved,
       },
       opts.view ?? "editor",
     );
@@ -169,13 +188,17 @@ function findTabWithPath(path: string): string | null {
 /** Insert the pages of other files into the open workspace. Returns how many pages were added. */
 export async function addFilesToWorkspace(files: PickedFile[], atIndex: number): Promise<number> {
   const app = useAppStore.getState();
+  const tabId = useTabsStore.getState().activeId;
+  if (!tabId) return 0;
   app.setBusy(t("Añadiendo páginas…"));
   try {
     let index = atIndex;
     let added = 0;
     for (const f of files) {
       try {
-        const { info, pages } = await loadSource(f);
+        const { info, pages } = await loadSource(f, tabId);
+        // The pages are for the document that asked for them, not for whichever is open now.
+        if (useTabsStore.getState().activeId !== tabId) break;
         useDocStore.getState().addSources([info]);
         insertPages(index, pages);
         index += pages.length;

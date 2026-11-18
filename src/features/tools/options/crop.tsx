@@ -55,7 +55,7 @@ function Overlay({ file, options }: { file: ToolFile; options: CropToolOptions }
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       <div
-        className="absolute border border-dashed border-brand-500 shadow-[0_0_0_999px_rgb(15_23_42/0.45)]"
+        className="absolute border border-dashed border-brand-500 shadow-[0_0_0_999px_rgb(0_0_0/0.45)]"
         style={{
           top: pct(options.top, height),
           bottom: pct(options.bottom, height),

@@ -127,11 +127,11 @@ export function PositionGrid<T extends string>({
               className={cn(
                 "grid size-8 place-items-center rounded-md border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-brand-500/50 disabled:cursor-not-allowed",
                 selected
-                  ? "border-brand-600 bg-brand-600 dark:border-brand-500 dark:bg-brand-500"
-                  : "border-line-strong bg-surface hover:border-brand-400 hover:bg-brand-50 dark:hover:bg-brand-500/10",
+                  ? "border-primary bg-primary"
+                  : "border-line-strong bg-surface hover:border-fg hover:bg-surface-3",
               )}
             >
-              <span className={cn("size-2 rounded-full", selected ? "bg-white" : "bg-subtle")} />
+              <span className={cn("size-2 rounded-full", selected ? "bg-surface" : "bg-subtle")} />
             </button>
           );
         })}

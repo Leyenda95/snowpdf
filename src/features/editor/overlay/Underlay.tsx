@@ -15,7 +15,7 @@ function EraseView({ obj, geom }: { obj: EraseObject; geom: PageGeometry }) {
         className="animate-pulse"
         style={{
           ...frameStyle(obj.frame, geom),
-          background: "repeating-linear-gradient(45deg, rgb(11 124 245 / 0.16) 0 6px, rgb(11 124 245 / 0.05) 6px 12px)",
+          background: "repeating-linear-gradient(45deg, rgb(255 79 31 / 0.16) 0 6px, rgb(255 79 31 / 0.05) 6px 12px)",
         }}
       />
     );
